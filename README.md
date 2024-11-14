@@ -112,6 +112,11 @@ minikube addons enable kong
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
 ```
 
+## Aplicar el ingress
+```bash
+kubectl apply -f kong/kong-ingress.yml
+```
+
 
 
 
