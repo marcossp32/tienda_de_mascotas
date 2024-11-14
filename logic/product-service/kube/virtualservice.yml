@@ -1,0 +1,15 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: product-service
+spec:
+  hosts:
+    - product-service
+  gateways:
+    - kong-gateway
+  http:
+    - route:
+        - destination:
+            host: product-service
+            port:
+              number: 80

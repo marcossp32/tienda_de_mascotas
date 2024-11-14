@@ -1,0 +1,15 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: search-service
+spec:
+  hosts:
+    - search-service
+  gateways:
+    - kong-gateway
+  http:
+    - route:
+        - destination:
+            host: search-service
+            port:
+              number: 80

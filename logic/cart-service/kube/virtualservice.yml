@@ -1,0 +1,15 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: cart-service
+spec:
+  hosts:
+    - cart-service
+  gateways:
+    - kong-gateway
+  http:
+    - route:
+        - destination:
+            host: cart-service
+            port:
+              number: 80

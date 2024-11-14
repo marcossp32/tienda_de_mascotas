@@ -1,0 +1,164 @@
+_format_version: "1.1"
+services:
+# Servicio de productos
+- name: product-service
+  url: http://product-service:8000
+  routes:
+  - name: list-products
+    methods: [GET]
+    paths:
+    - /api/products
+  - name: product-details
+    methods: [GET]
+    paths:
+    - /api/products/{productId}
+  - name: create-product
+    methods: [POST]
+    paths:
+    - /api/products
+  - name: update-product
+    methods: [PUT]
+    paths:
+    - /api/products/{productId}
+  - name: delete-product
+    methods: [DELETE]
+    paths:
+    - /api/products/{productId}
+
+# Servicio de categorías
+- name: category-service
+  url: http://category-service:8000
+  routes:
+  - name: list-categories
+    methods: [GET]
+    paths:
+    - /api/categories
+  - name: category-details
+    methods: [GET]
+    paths:
+    - /api/categories/{categoryId}
+  - name: create-category
+    methods: [POST]
+    paths:
+    - /api/categories
+  - name: update-category
+    methods: [PUT]
+    paths:
+    - /api/categories/{categoryId}
+  - name: delete-category
+    methods: [DELETE]
+    paths:
+    - /api/categories/{categoryId}
+
+# Servicio de usuarios
+- name: user-service
+  url: http://user-service:8000
+  routes:
+  - name: register-user
+    methods: [POST]
+    paths:
+    - /api/users/register
+  - name: login-user
+    methods: [POST]
+    paths:
+    - /api/users/login
+  - name: user-profile
+    methods: [GET]
+    paths:
+    - /api/users/profile
+  - name: update-profile
+    methods: [PUT]
+    paths:
+    - /api/users/profile
+  - name: list-addresses
+    methods: [GET]
+    paths:
+    - /api/users/addresses
+  - name: add-address
+    methods: [POST]
+    paths:
+    - /api/users/addresses
+  - name: update-address
+    methods: [PUT]
+    paths:
+    - /api/users/addresses/{addressId}
+  - name: delete-address
+    methods: [DELETE]
+    paths:
+    - /api/users/addresses/{addressId}
+
+# Servicio de carrito
+- name: cart-service
+  url: http://cart-service:8000
+  routes:
+  - name: get-cart
+    methods: [GET]
+    paths:
+    - /api/cart
+  - name: add-to-cart
+    methods: [POST]
+    paths:
+    - /api/cart/items
+  - name: update-cart-item
+    methods: [PUT]
+    paths:
+    - /api/cart/items/{itemId}
+  - name: delete-cart-item
+    methods: [DELETE]
+    paths:
+    - /api/cart/items/{itemId}
+  - name: clear-cart
+    methods: [DELETE]
+    paths:
+    - /api/cart
+
+# Servicio de pedidos
+- name: order-service
+  url: http://order-service:8000
+  routes:
+  - name: create-order
+    methods: [POST]
+    paths:
+    - /api/orders
+  - name: list-orders
+    methods: [GET]
+    paths:
+    - /api/orders
+  - name: order-details
+    methods: [GET]
+    paths:
+    - /api/orders/{orderId}
+  - name: cancel-order
+    methods: [POST]
+    paths:
+    - /api/orders/{orderId}/cancel
+
+# Servicio de reseñas
+- name: review-service
+  url: http://review-service:8000
+  routes:
+  - name: list-reviews
+    methods: [GET]
+    paths:
+    - /api/products/{productId}/reviews
+  - name: add-review
+    methods: [POST]
+    paths:
+    - /api/products/{productId}/reviews
+  - name: update-review
+    methods: [PUT]
+    paths:
+    - /api/products/{productId}/reviews/{reviewId}
+  - name: delete-review
+    methods: [DELETE]
+    paths:
+    - /api/products/{productId}/reviews/{reviewId}
+
+# Servicio de búsqueda
+- name: search-service
+  url: http://search-service:8000
+  routes:
+  - name: general-search
+    methods: [GET]
+    paths:
+    - /api/search

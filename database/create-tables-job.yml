@@ -1,0 +1,16 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-tables
+spec:
+  template:
+    spec:
+      containers:
+      - name: create-tables
+        image: marcossp32/create-tables:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore"
+      restartPolicy: Never
+  backoffLimit: 4

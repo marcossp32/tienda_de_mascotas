@@ -1,0 +1,14 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: product-service
+spec:
+  host: product-service
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 1
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
