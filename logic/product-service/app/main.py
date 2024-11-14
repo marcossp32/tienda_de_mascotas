@@ -6,7 +6,7 @@ app = Flask(__name__)
 # 1.1 Listar productos
 @app.route('/api/products', methods=['GET'])
 def list_products():
-    None
+    return "Hola mundo, estas en products"
 
 
 # 1.2 Obtener detalles de un producto
