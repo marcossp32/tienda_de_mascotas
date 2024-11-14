@@ -118,17 +118,17 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 ## Modificaciones adicionales
 
 
-# Poner NodePort en vez de LoadBalancer
+### Poner NodePort en vez de LoadBalancer
 ```bash
 kubectl edit svc kong-proxy -n kong
 ```
 
-# ClusterRole
+### ClusterRole
 ```bash
 kubectl edit clusterrole kong-ingress
 ```
 
-# Meter esto
+### Meter esto
 ```bash
 - apiGroups:
   - configuration.konghq.com
@@ -145,13 +145,13 @@ kubectl edit clusterrole kong-ingress
   - watch
 ```
 
-# Reiniciar el deployment
+### Reiniciar el deployment
 ```bash
 kubectl rollout restart deployment ingress-kong -n kong
 ```
 
 
-# Curl para probar el signup:
+### Curl para probar el signup:
 ```bash
 curl.exe -X POST `
   --url "http://127.0.0.1:8000/api/users/register" `
