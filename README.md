@@ -38,19 +38,19 @@ minikube version
 minikube start --driver=docker
 ```
 
-## Instalar istio
+<!-- ## Instalar istio (De momento no)
 ```bash
 curl -L https://istio.io/downloadIstio | sh -
 cd istio-1.x.x
 export PATH=$PWD/bin:$PATH
 istioctl install --set profile=demo -y
 kubectl -n istio-system get deploy
-```
+``` -->
 
-## Habilitar inyección automática de sidecar
+<!-- ## Habilitar inyección automática de sidecar
 ```bash
 kubectl label namespace default istio-injection=enabled
-```
+``` -->
 
 ## Configurar Docker con Minikube
 ```bash
@@ -102,73 +102,51 @@ psql -U postgres -d petstore
 \dt para ver todas las tablas
 ```
 
-## Habilitar el addon de Kong
+##  Instalación y Configuración de Kong en Kubernetes con Helm
 ```bash
-minikube addons enable kong
+helm repo add kong https://charts.konghq.com && helm repo update
+helm install kong kong/kong --set ingressController.installCRDs=false && \
+helm upgrade kong kong/kong --set admin.enabled=true --set admin.http.enabled=true
+
 ```
 
-## Aplicar CRD faltantes
+##  Comprobar que todo  esta correcto
 ```bash
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
+ kubectl get pods
+ kubectl get svc
 ```
 
-## Aplicar el ingress
+
+##  Aplicar el ingress con las rutas para la API Gateway
 ```bash
 kubectl apply -f kong/kong-ingress.yml
 ```
 
-
-
-
-## Modificaciones adicionales
-
-
-### Poner NodePort en vez de LoadBalancer
+# Para probar el registro
 ```bash
-kubectl edit svc kong-proxy -n kong
-```
-
-### ClusterRole
-```bash
-kubectl edit clusterrole kong-ingress
-```
-
-### Meter esto
-```bash
-- apiGroups:
-  - configuration.konghq.com
-  resources:
-  - kongconsumergroups
-  verbs:
-  - get
-  - list
-  - watch
-
-# Y en el final en customresourcedefinitions
- verbs:
-  - list
-  - watch
-```
-
-### Reiniciar el deployment
-```bash
-kubectl rollout restart deployment ingress-kong -n kong
-```
-
-
-### Curl para probar el signup:
-```bash
-curl.exe -X POST `
-  --url "http://127.0.0.1:8000/api/users/register" `
-  --header "Content-Type: application/json" `
-  --data @"
-{
-  "username": "nuevo_usuario",
-  "password": "contraseña_segura",
-  "email": "nuevo_usuario@example.com",
-  "firstName": "Nombre",
-  "lastName": "Apellido",
+ curl -X POST http://mini:30409/api/users/register -H "Content-Type: application/json" -d '{
+  "username": "prueba",
+  "password": "12345",
+  "email": "prueba@gmail.com",
+  "firstName": "pruebaNombre",
+  "lastName": "pruebaApellido",
   "phoneNumber": "123456789"
-}
-"@
+}'
+```
+
+### Debe devolver un mensaje como 
+```bash
+{"message":"Usuario registrado con \u00e9xito","token":"eyJhbGciOiJqUzI1NnR5cCI6IkpXVCJ9.eyJ1ca12UO98snia82TlkMTk2Y2IthLWExMI5Ndj48ak1hwIjoxNzMxNzU4ODEwfQ.4AzOdX7Q75_yZq9HntelIk2pCw_Ks"}
+```
+
+# Para probar el inicio de sesión
+```bash
+curl -X POST http://mini:30409/api/users/login -H "Content-Type: application/json" -d '{
+  "username": "prueba",
+  "password": "12345"
+}'
+```
+### Debe devolver un mensaje como 
+```bash
+{"message":"Inicio de sesi\u00f3n exitoso","token":"eyJhbGciOiJqUzI1NnR5cCI6IkpXVCJ9.eyJ1ca12UO98snia82TlkMTk2Y2IthLWExMI5Ndj48ak1hwIjoxNzMxNzU4ODEwfQ.4AzOdX7Q75_yZq9HntelIk2pCw_Ks"}
 ```
