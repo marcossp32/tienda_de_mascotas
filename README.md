@@ -122,7 +122,18 @@ helm upgrade kong kong/kong --set admin.enabled=true --set admin.http.enabled=tr
 kubectl apply -f kong/kong-ingress.yml
 ```
 
-# Para probar el registro
+## Aplicar el host indicado
+```bash
+minikube ip
+sudo nano /etc/hosts
+```
+Dentro se debe meter la ip de minikube con el nombre mini de esta manera
+```bash
+192.168.49.2   mini
+```
+
+
+## Para probar el registro
 ```bash
  curl -X POST http://mini:30409/api/users/register -H "Content-Type: application/json" -d '{
   "username": "prueba",
@@ -139,7 +150,7 @@ kubectl apply -f kong/kong-ingress.yml
 {"message":"Usuario registrado con \u00e9xito","token":"eyJhbGciOiJqUzI1NnR5cCI6IkpXVCJ9.eyJ1ca12UO98snia82TlkMTk2Y2IthLWExMI5Ndj48ak1hwIjoxNzMxNzU4ODEwfQ.4AzOdX7Q75_yZq9HntelIk2pCw_Ks"}
 ```
 
-# Para probar el inicio de sesión
+## Para probar el inicio de sesión
 ```bash
 curl -X POST http://mini:30409/api/users/login -H "Content-Type: application/json" -d '{
   "username": "prueba",
