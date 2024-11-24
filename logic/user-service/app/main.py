@@ -89,8 +89,8 @@ def register_user():
     created_at = datetime.datetime.now(datetime.timezone.utc)
 
     db.session.execute(
-        "INSERT INTO users (id, username, email, password, first_name, last_name, phone_number, created_at) "
-        "VALUES (:id, :username, :email, :password, :first_name, :last_name, :phone_number, :created_at)",
+    "INSERT INTO users (id, username, email, password, first_name, last_name, phone_number, created_at, role) "
+    "VALUES (:id, :username, :email, :password, :first_name, :last_name, :phone_number, :created_at, :role)",
         {
             'id': user_id,
             'username': username,
@@ -100,9 +100,11 @@ def register_user():
             'last_name': data.get('lastName', ''),
             'phone_number': data.get('phoneNumber', ''),
             'created_at': created_at,
+            'role': 'user',  # Por defecto lo dejo en user
         }
     )
     db.session.commit()
+
 
     # Crear y devolver token JWT
     token = create_jwt_token(user_id)

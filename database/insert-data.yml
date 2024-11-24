@@ -1,14 +1,15 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: create-tables
+  name: insert-data
 spec:
   template:
     spec:
       containers:
-      - name: create-tables
+      - name: insert-data
         image: postgres-service:latest
         imagePullPolicy: IfNotPresent
+        command: ["python", "insert-data.py"]
         env:
         - name: DATABASE_URL
           value: "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore"

@@ -54,6 +54,7 @@ kubectl label namespace default istio-injection=enabled
 
 ## Configurar Docker con Minikube
 ```bash
+
 eval $(minikube docker-env)
 ```
 
@@ -81,6 +82,8 @@ kubectl apply -f logic/user-service/kube/
 kubectl apply -f database/deployment.yml
 kubectl apply -f database/service.yml
 kubectl apply -f database/create-tables-job.yml
+kubectl apply -f database/insert-data.yml
+
 ```
 
 ## Verificar Estado de los Pods y Servicios
@@ -89,7 +92,7 @@ kubectl get pods -n default
 kubectl get svc -n default
 ```
 
-## En caso de que este en not ready el pod de create tables y no se hayan creado las tablas, borrar 
+## En caso de que el pod de de create tables este en not ready y no se hayan creado las tablas, borrar y volver a comprobar
 ```bash
 kubectl delete pod -l app=postgres
 kubectl delete pod <pod de createtables>
@@ -133,9 +136,17 @@ Dentro se debe meter la ip de minikube con el nombre mini de esta manera
 ```
 
 
+
+
 ## Para probar el registro
+
+### Comprueba el puerto del kong proxy para realizar  el curl
 ```bash
- curl -X POST http://mini:30409/api/users/register -H "Content-Type: application/json" -d '{
+ kubectl get svc
+```
+
+```bash
+ curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/register -H "Content-Type: application/json" -d '{
   "username": "prueba",
   "password": "12345",
   "email": "prueba@gmail.com",
@@ -152,7 +163,7 @@ Dentro se debe meter la ip de minikube con el nombre mini de esta manera
 
 ## Para probar el inicio de sesión
 ```bash
-curl -X POST http://mini:30409/api/users/login -H "Content-Type: application/json" -d '{
+curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/login -H "Content-Type: application/json" -d '{
   "username": "prueba",
   "password": "12345"
 }'
@@ -160,4 +171,15 @@ curl -X POST http://mini:30409/api/users/login -H "Content-Type: application/jso
 ### Debe devolver un mensaje como 
 ```bash
 {"message":"Inicio de sesi\u00f3n exitoso","token":"eyJhbGciOiJqUzI1NnR5cCI6IkpXVCJ9.eyJ1ca12UO98snia82TlkMTk2Y2IthLWExMI5Ndj48ak1hwIjoxNzMxNzU4ODEwfQ.4AzOdX7Q75_yZq9HntelIk2pCw_Ks"}
+```
+
+
+
+## Kafka
+```bash
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+```
+```bash
+helm install mi-kafka bitnami/kafka
 ```

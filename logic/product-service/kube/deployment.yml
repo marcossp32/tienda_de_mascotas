@@ -23,3 +23,5 @@ spec:
         env:
         - name: DATABASE_URL
           value: "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore"
+        - name: KAFKA_BROKER
+          value: "mi-kafka.default.svc.cluster.local:9092"
