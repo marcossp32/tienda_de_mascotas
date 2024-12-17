@@ -4,8 +4,7 @@
 Este proyecto contiene las instrucciones necesarias para configurar y desplegar una API RESTful para una tienda de mascotas, utilizando herramientas como Docker, Minikube, Istio y Kong.
 
 ## Documentación Adicional
-- [Documentación API RESTful para Tienda de Mascotas (PDF)](file:///C:/Users/marco/Desktop/UNI/A%C3%91O%204/INTEGRACION%20DE%20APLICACIONES/Practica2/Documentaci%C3%B3n%20API%20RESTful%20para%20Tienda%20de%20Mascotas.pdf)
-- [Proyecto Final Integración de Aplicaciones (PDF)](file:///C:/Users/marco/Desktop/UNI/A%C3%91O%204/INTEGRACION%20DE%20APLICACIONES/final_project/PROYECTO%20FINAL%20INTEGRACI%C3%B3N%20DE%20APLICACIONES.pdf)
+
 - [Kong API Gateway - Ejemplo de Configuración](https://github.com/jlfg-evereven/ucjc-ida/blob/main/kong-api-gateway/README.md)
 - [Documentación Oficial de Minikube con Kong](https://minikube.sigs.k8s.io/docs/handbook/addons/kong-ingress/)
 
@@ -68,6 +67,20 @@ docker build -t review-service:latest ./logic/review-service
 docker build -t search-service:latest ./logic/search-service
 docker build -t user-service:latest ./logic/user-service
 docker build -t postgres-service:latest ./database
+# docker build -t custom-kafka:latest ./kafka
+# docker build -t custom-zookeeper:latest ./zookeeper
+
+
+```
+
+## Aplicar la configuracion de kafka y zookeeper
+
+```bash
+kubectl apply -f kafka/kafka.yml
+kubectl apply -f kafka/configMap.yml
+kubectl apply -f kafka/kafka-topic-creator.yml
+kubectl apply -f zookeeper/zookeeper.yml
+
 ```
 
 ## Aplicar Configuraciones en Kubernetes
@@ -108,6 +121,7 @@ psql -U postgres -d petstore
 ##  Instalación y Configuración de Kong en Kubernetes con Helm
 ```bash
 helm repo add kong https://charts.konghq.com && helm repo update
+
 helm install kong kong/kong --set ingressController.installCRDs=false && \
 helm upgrade kong kong/kong --set admin.enabled=true --set admin.http.enabled=true
 
@@ -134,9 +148,6 @@ Dentro se debe meter la ip de minikube con el nombre mini de esta manera
 ```bash
 192.168.49.2   mini
 ```
-
-
-
 
 ## Para probar el registro
 
@@ -171,15 +182,4 @@ curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/
 ### Debe devolver un mensaje como 
 ```bash
 {"message":"Inicio de sesi\u00f3n exitoso","token":"eyJhbGciOiJqUzI1NnR5cCI6IkpXVCJ9.eyJ1ca12UO98snia82TlkMTk2Y2IthLWExMI5Ndj48ak1hwIjoxNzMxNzU4ODEwfQ.4AzOdX7Q75_yZq9HntelIk2pCw_Ks"}
-```
-
-
-
-## Kafka
-```bash
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm repo update
-```
-```bash
-helm install mi-kafka bitnami/kafka
 ```

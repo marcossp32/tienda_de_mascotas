@@ -18,28 +18,13 @@ spec:
                 name: product-service
                 port:
                   number: 80
-          - path: /api/products/{productId}
+          - path: /api/products/
             pathType: Prefix
             backend:
               service:
                 name: product-service
                 port:
                   number: 80
-          - path: /api/products/{productId}/reviews
-            pathType: Prefix
-            backend:
-              service:
-                name: review-service
-                port:
-                  number: 80
-          - path: /api/products/{productId}/reviews/{reviewId}
-            pathType: Prefix
-            backend:
-              service:
-                name: review-service
-                port:
-                  number: 80
-
           # Categorías
           - path: /api/categories
             pathType: Prefix
@@ -48,52 +33,22 @@ spec:
                 name: category-service
                 port:
                   number: 80
-          - path: /api/categories/{categoryId}
+          - path: /api/categories/
             pathType: Prefix
             backend:
               service:
                 name: category-service
                 port:
                   number: 80
-
           # Usuarios
-          - path: /api/users/register
+          - path: /api/users
             pathType: Prefix
             backend:
               service:
                 name: user-service
                 port:
                   number: 80
-          - path: /api/users/login
-            pathType: Prefix
-            backend:
-              service:
-                name: user-service
-                port:
-                  number: 80
-          - path: /api/users/profile
-            pathType: Prefix
-            backend:
-              service:
-                name: user-service
-                port:
-                  number: 80
-          - path: /api/users/addresses
-            pathType: Prefix
-            backend:
-              service:
-                name: user-service
-                port:
-                  number: 80
-          - path: /api/users/addresses/{addressId}
-            pathType: Prefix
-            backend:
-              service:
-                name: user-service
-                port:
-                  number: 80
-
-          # Carrito de Compras
+          # Carrito
           - path: /api/cart
             pathType: Prefix
             backend:
@@ -101,21 +56,6 @@ spec:
                 name: cart-service
                 port:
                   number: 80
-          - path: /api/cart/items
-            pathType: Prefix
-            backend:
-              service:
-                name: cart-service
-                port:
-                  number: 80
-          - path: /api/cart/items/{itemId}
-            pathType: Prefix
-            backend:
-              service:
-                name: cart-service
-                port:
-                  number: 80
-
           # Pedidos
           - path: /api/orders
             pathType: Prefix
@@ -124,21 +64,6 @@ spec:
                 name: order-service
                 port:
                   number: 80
-          - path: /api/orders/{orderId}
-            pathType: Prefix
-            backend:
-              service:
-                name: order-service
-                port:
-                  number: 80
-          - path: /api/orders/{orderId}/cancel
-            pathType: Prefix
-            backend:
-              service:
-                name: order-service
-                port:
-                  number: 80
-
           # Búsqueda
           - path: /api/search
             pathType: Prefix

@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topics-creator
+spec:
+  template:
+    metadata:
+      name: kafka-topics-creator
+    spec:
+      containers:
+        - name: kafka-topics-creator
+          image: docker.io/bitnami/kafka:2.8
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              echo "Creando el tópico: ${SEARCH_TOPIC}"
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${SEARCH_TOPIC}
+
+              echo "Creando el tópico: ${PAGEVIEW_TOPIC}"
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${PAGEVIEW_TOPIC}
+
+              echo "Listando tópicos existentes:"
+              kafka-topics.sh --list --bootstrap-server ${KAFKA_BROKER}
+          env:
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: KAFKA_BROKER
+            - name: SEARCH_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: SEARCH_TOPIC
+            - name: PAGEVIEW_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: PAGEVIEW_TOPIC
+            - name: PARTITIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: PARTITIONS
+            - name: REPLICATION_FACTOR
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: REPLICATION_FACTOR
+      restartPolicy: OnFailure

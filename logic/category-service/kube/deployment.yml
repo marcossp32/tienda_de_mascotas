@@ -24,4 +24,13 @@ spec:
         - name: DATABASE_URL
           value: "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore"
         - name: KAFKA_BROKER
-          value: "mi-kafka.default.svc.cluster.local:9092"
+          value: "kafka.default.svc.cluster.local:9092"
+        - name: KAFKA_TOPIC
+          value: "search-topic"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"

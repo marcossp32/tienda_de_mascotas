@@ -13,7 +13,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Configuración de la base de datos y SQLAlchemy desde la variable de entorno DATABASE_URL
-database_url = os.getenv("DATABASE_URL", "postgresql://postgres:12345@localhost:5432/petstore")
+database_url = os.getenv("DATABASE_URL", "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore")
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
