@@ -27,6 +27,69 @@ spec:
                 --partitions ${PARTITIONS} \
                 --topic ${PAGEVIEW_TOPIC}
 
+              echo "Creando el tópico: ${REVIEWS_RESPONSES_TOPIC}"
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${REVIEWS_RESPONSES_TOPIC}
+
+              echo "Creando el tópico: ${PRODUCT_AVAILABILITY_REQUESTS_TOPIC}"
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${PRODUCT_AVAILABILITY_REQUESTS_TOPIC}
+
+              echo "Creando el tópico: ${PRODUCT_AVAILABILITY_RESPONSES_TOPIC}"
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${PRODUCT_AVAILABILITY_RESPONSES_TOPIC}
+
+              echo "Creando el tópico: ${INVENTORY_UPDATES_TOPIC}"
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${INVENTORY_UPDATES_TOPIC}
+
+              echo "Creando el tópico: ${ORDERS_TOPIC}"
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${ORDERS_TOPIC}
+
+              echo "Creando el tópico: ${ADDRESS_REQUESTS_TOPIC}" # Nuevo
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${ADDRESS_REQUESTS_TOPIC}
+
+              echo "Creando el tópico: ${ADDRESS_RESPONSES_TOPIC}" # Nuevo
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${ADDRESS_RESPONSES_TOPIC}
+
+              echo "Creando el tópico: ${CART_REQUESTS_TOPIC}" # Nuevo
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${CART_REQUESTS_TOPIC}
+
+              echo "Creando el tópico: ${CART_RESPONSES_TOPIC}" # Nuevo
+              kafka-topics.sh --create \
+                --bootstrap-server ${KAFKA_BROKER} \
+                --replication-factor ${REPLICATION_FACTOR} \
+                --partitions ${PARTITIONS} \
+                --topic ${CART_RESPONSES_TOPIC}
+
               echo "Listando tópicos existentes:"
               kafka-topics.sh --list --bootstrap-server ${KAFKA_BROKER}
           env:
@@ -45,6 +108,51 @@ spec:
                 configMapKeyRef:
                   name: kafka-config
                   key: PAGEVIEW_TOPIC
+            - name: REVIEWS_RESPONSES_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: REVIEWS_RESPONSES_TOPIC
+            - name: PRODUCT_AVAILABILITY_REQUESTS_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: PRODUCT_AVAILABILITY_REQUESTS_TOPIC
+            - name: PRODUCT_AVAILABILITY_RESPONSES_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: PRODUCT_AVAILABILITY_RESPONSES_TOPIC
+            - name: INVENTORY_UPDATES_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: INVENTORY_UPDATES_TOPIC
+            - name: ORDERS_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: ORDERS_TOPIC
+            - name: ADDRESS_REQUESTS_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: ADDRESS_REQUESTS_TOPIC
+            - name: ADDRESS_RESPONSES_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: ADDRESS_RESPONSES_TOPIC
+            - name: CART_REQUESTS_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: CART_REQUESTS_TOPIC
+            - name: CART_RESPONSES_TOPIC
+              valueFrom:
+                configMapKeyRef:
+                  name: kafka-config
+                  key: CART_RESPONSES_TOPIC
             - name: PARTITIONS
               valueFrom:
                 configMapKeyRef:

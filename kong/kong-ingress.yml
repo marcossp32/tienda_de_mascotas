@@ -10,6 +10,13 @@ spec:
     - host: mini
       http:
         paths:
+          - path: /api/products/.*/reviews
+            pathType: Prefix
+            backend:
+              service:
+                name: review-service
+                port:
+                  number: 80
           # Productos
           - path: /api/products
             pathType: Prefix

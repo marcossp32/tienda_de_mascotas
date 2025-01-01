@@ -37,23 +37,8 @@ minikube version
 minikube start --driver=docker
 ```
 
-<!-- ## Instalar istio (De momento no)
-```bash
-curl -L https://istio.io/downloadIstio | sh -
-cd istio-1.x.x
-export PATH=$PWD/bin:$PATH
-istioctl install --set profile=demo -y
-kubectl -n istio-system get deploy
-``` -->
-
-<!-- ## Habilitar inyección automática de sidecar
-```bash
-kubectl label namespace default istio-injection=enabled
-``` -->
-
 ## Configurar Docker con Minikube
 ```bash
-
 eval $(minikube docker-env)
 ```
 
@@ -67,10 +52,6 @@ docker build -t review-service:latest ./logic/review-service
 docker build -t search-service:latest ./logic/search-service
 docker build -t user-service:latest ./logic/user-service
 docker build -t postgres-service:latest ./database
-# docker build -t custom-kafka:latest ./kafka
-# docker build -t custom-zookeeper:latest ./zookeeper
-
-
 ```
 
 ## Aplicar la configuracion de kafka y zookeeper
@@ -80,10 +61,24 @@ kubectl apply -f kafka/kafka.yml
 kubectl apply -f kafka/configMap.yml
 kubectl apply -f kafka/kafka-topic-creator.yml
 kubectl apply -f zookeeper/zookeeper.yml
-
 ```
 
+
 ## Aplicar Configuraciones en Kubernetes
+
+
+### Primero se aplican los yml de la base de datos.
+```bash
+kubectl apply -f database/deployment.yml
+kubectl apply -f database/service.yml
+```
+
+### Una vez veamos que el pod de postgres esta corriendo
+```bash
+kubectl apply -f database/create-tables-job.yml
+kubectl apply -f database/insert-data.yml
+```
+
 ```bash
 kubectl apply -f logic/cart-service/kube/
 kubectl apply -f logic/category-service/kube/
@@ -92,11 +87,6 @@ kubectl apply -f logic/product-service/kube/
 kubectl apply -f logic/review-service/kube/
 kubectl apply -f logic/search-service/kube/
 kubectl apply -f logic/user-service/kube/
-kubectl apply -f database/deployment.yml
-kubectl apply -f database/service.yml
-kubectl apply -f database/create-tables-job.yml
-kubectl apply -f database/insert-data.yml
-
 ```
 
 ## Verificar Estado de los Pods y Servicios
@@ -115,6 +105,11 @@ kubectl delete pod <pod de createtables>
 ```bash
 kubectl exec -it <pod de postgres> -- bash
 psql -U postgres -d petstore
+
+o
+
+kubectl exec -it <pod de postgres> -- psql -U postgres -d petstore
+
 \dt para ver todas las tablas
 ```
 
@@ -157,7 +152,7 @@ Dentro se debe meter la ip de minikube con el nombre mini de esta manera
 ```
 
 ```bash
- curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/register -H "Content-Type: application/json" -d '{
+curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/register -H "Content-Type: application/json" -d '{
   "username": "prueba",
   "password": "12345",
   "email": "prueba@gmail.com",
@@ -183,3 +178,6 @@ curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/
 ```bash
 {"message":"Inicio de sesi\u00f3n exitoso","token":"eyJhbGciOiJqUzI1NnR5cCI6IkpXVCJ9.eyJ1ca12UO98snia82TlkMTk2Y2IthLWExMI5Ndj48ak1hwIjoxNzMxNzU4ODEwfQ.4AzOdX7Q75_yZq9HntelIk2pCw_Ks"}
 ```
+
+
+<!-- curl -X GET "http://mini:32542/api/search?q=perro" -H "Content-Type: application/json" -->

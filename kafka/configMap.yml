@@ -6,5 +6,14 @@ data:
   KAFKA_BROKER: "kafka:9092"
   SEARCH_TOPIC: "search-topic"
   PAGEVIEW_TOPIC: "pageview"
+  REVIEWS_RESPONSES_TOPIC: "reviews-responses"
+  PRODUCT_AVAILABILITY_REQUESTS_TOPIC: "product-availability-requests"
+  PRODUCT_AVAILABILITY_RESPONSES_TOPIC: "product-availability-responses"
+  INVENTORY_UPDATES_TOPIC: "inventory-updates"
+  ORDERS_TOPIC: "orders"
+  ADDRESS_REQUESTS_TOPIC: "address-requests" # Nuevo
+  ADDRESS_RESPONSES_TOPIC: "address-responses" # Nuevo
+  CART_REQUESTS_TOPIC: "cart-items-requests" # Nuevo
+  CART_RESPONSES_TOPIC: "cart-responses" # Nuevo
   PARTITIONS: "2"
   REPLICATION_FACTOR: "1"

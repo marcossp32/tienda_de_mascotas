@@ -1,100 +1,180 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from kafka import KafkaProducer
-import os
+from kafka import KafkaConsumer, KafkaProducer
 import json
+import os
+import threading
+from threading import Lock, Event
+from datetime import datetime
 import random
+import sys
+from uuid import UUID
 
-# Configurar la app Flask
+
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
+
+# Configuración de Flask
 app = Flask(__name__)
 CORS(app)
-
-# Configuración de la base de datos
 database_url = os.getenv("DATABASE_URL", "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore")
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
 db = SQLAlchemy(app)
 
-# Configuración del productor de Kafka
+# Configuración de Kafka
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
+
 producer = KafkaProducer(
-    bootstrap_servers=os.getenv("KAFKA_BROKER", "kafka.default.svc.cluster.local:9092"),
+    bootstrap_servers=KAFKA_BROKER,
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-# Clase PageView
-class PageView:
-    def __init__(self, url: str):
-        self._url = url
-
-    @property
-    def url(self):
-        return self._url
-
-    def to_json(self):
-        return json.dumps({"pageview": {"url": self.url}})
-
-# Clase PageViewKafkaLogger
-class PageViewKafkaLogger:
-    def __init__(self, broker: str = 'kafka.default.svc.cluster.local:9092'):
-        self.producer = KafkaProducer(
-            bootstrap_servers=broker,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+def consume_availability_requests():
+    try:
+        consumer = KafkaConsumer(
+            'product-availability-requests',
+            bootstrap_servers=KAFKA_BROKER,
+            value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+            group_id=f'product-service-{random.randint(1, 100000)}',
+            auto_offset_reset='latest'
         )
+        print("Iniciando consumo del tópico 'product-availability-requests'")
 
-    def produce(self, pageview: PageView):
-        try:
-            # Enviar un mensaje al tópico 'pageview'
-            self.producer.send(
-                topic='pageview',
-                key=f"{random.randrange(999999)}".encode(),
-                value=json.loads(pageview.to_json())
-            )
-            self.producer.flush()
-        except Exception as e:
-            print(f"Error enviando PageView a Kafka: {e}")
+        for message in consumer:
+            data = message.value
+            product_id = data.get('product_id')
+            quantity = data.get('quantity', 1)
+            print(f"Solicitud de disponibilidad recibida para producto {product_id}, cantidad {quantity}")
 
-pageview_logger = PageViewKafkaLogger()
+            # Crear un contexto de solicitud falso para llamar al endpoint `/api/products`
+            with app.test_request_context(f"/api/products?q={product_id}"):
+                try:
+                    response = list_products()
 
-# Listar productos
+                    # Verificar si `response` es una tupla
+                    if isinstance(response, tuple):
+                        response_data, status_code = response
+                    else:
+                        response_data = response
+                        status_code = 200
+
+                    # Verificar el estado HTTP de la respuesta
+                    if status_code == 200:
+                        products = response_data.get_json().get('products', [])
+                        print(f"Productos devueltos: {products}")  # Depuración
+                        product = next((p for p in products if str(p['id']) == str(product_id)), None)
+
+                        if product:
+                            print(f"Producto encontrado: {product}")  # Depuración
+                            stock = product.get('stock', 0)
+                            price = product.get('price', 0)
+                            available = stock >= quantity
+                        else:
+                            print(f"Producto no encontrado con ID: {product_id}")  # Depuración
+                            stock = 0
+                            price = 0
+                            available = False
+
+                        # Respuesta para Kafka
+                        kafka_response = {
+                            "product_id": product_id,
+                            "available": available,
+                            "stock": stock,
+                            "price": price
+                        }
+                        producer.send('product-availability-responses', kafka_response)
+                        producer.flush()
+                        print(f"Respuesta de disponibilidad enviada: {kafka_response}")
+                    else:
+                        print(f"Error al consultar productos: {status_code}")
+                except Exception as e:
+                    print(f"Error al procesar disponibilidad para producto {product_id}: {str(e)}")
+    except Exception as e:
+        print(f"Error en el consumidor de Kafka para 'product-availability-requests': {e}")
+
+
+
+def consume_search_requests():
+    try:
+        print("Intentando inicializar el consumidor de Kafka...")
+        consumer = KafkaConsumer(
+            'search-requests',
+            bootstrap_servers=KAFKA_BROKER,
+            value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+            group_id=f"product-service-{random.randint(1, 100000)}",
+            auto_offset_reset='latest'
+        )
+        print("Iniciando consumo del tópico 'search-requests'")
+
+        for message in consumer:
+            data = message.value
+            query = data.get('query', '')
+
+            # Crear un contexto de solicitud falso
+            with app.test_request_context(f"/api/products?q={query}"):
+                # Llamar directamente al endpoint
+                response = list_products()
+                status_code = response[1]
+
+                if status_code == 200:
+                    products = response[0].get_json()['products']
+                    # Publicar resultados en Kafka
+                    producer.send('products-responses', {'type': 'product', 'data': products})
+                    producer.flush()
+                    print(f"Respuesta enviada a Kafka: {products}")
+                else:
+                    print(f"Error al consultar productos: {status_code}")
+
+    except Exception as e:
+        print(f"Error en el consumidor de Kafka para 'search-requests': {e}")
+
+
+# Iniciar consumidores en hilos separados
+threading.Thread(target=consume_search_requests, daemon=True).start()
+threading.Thread(target=consume_availability_requests, daemon=True).start()
+# threading.Thread(target=consume_inventory_updates, daemon=True).start()
+
+
 @app.route('/api/products', methods=['GET'])
 def list_products():
     try:
-        # Obtener parámetros
-        category = request.args.get('category')
-        price_min = request.args.get('priceMin', type=float)
-        price_max = request.args.get('priceMax', type=float)
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 10))
-        offset = (page - 1) * limit
+        # Obtener los parámetros de consulta
+        query = request.args.get('q', '').lower()
+        animal_type = request.args.get('animal_type', '').lower()
+        tags = request.args.getlist('tags')  # Lista de tags si se pasan varios
 
-        # Construir la consulta SQL
+        # Construir consulta base
         base_query = """
-        SELECT id, name, description, price, category, stock, images, created_at, updated_at
+        SELECT id, name, description, price, category, animal_type, brand, stock, images, specifications, tags, average_rating, created_at, updated_at
         FROM products
-        WHERE 1=1
+        WHERE 
         """
-        filters = []
+        # Parámetros de la consulta
         params = {}
 
-        if category:
-            filters.append("category = :category")
-            params['category'] = category
-        if price_min:
-            filters.append("price >= :price_min")
-            params['price_min'] = price_min
-        if price_max:
-            filters.append("price <= :price_max")
-            params['price_max'] = price_max
+        # Añadir filtros dinámicamente
+        filters = []
+        if query:
+            if len(query) == 36:  # Si query tiene formato UUID
+                filters.append("id::text = :query_id")
+                params['query_id'] = query
+            else:
+                filters.append("LOWER(name) LIKE :query OR LOWER(tags::text) LIKE :query")
+                params['query'] = f"%{query}%"
+        if animal_type:
+            filters.append("LOWER(animal_type) = :animal_type")
+            params['animal_type'] = animal_type
+        if tags:
+            filters.append("array_to_string(tags, ',') ILIKE :tags")
+            params['tags'] = f"%{','.join(tags)}%"
 
-        if filters:
-            base_query += " AND " + " AND ".join(filters)
+        # Completar la consulta con los filtros
+        base_query += " AND ".join(filters)
 
-        base_query += " LIMIT :limit OFFSET :offset"
-        params.update({'limit': limit, 'offset': offset})
-
-        # Consultar la base de datos
+        # Ejecutar consulta
         result = db.session.execute(base_query, params).fetchall()
 
         # Procesar resultados
@@ -104,41 +184,135 @@ def list_products():
             'description': row['description'],
             'price': row['price'],
             'category': str(row['category']),
+            'animal_type': row['animal_type'],
+            'brand': row['brand'],
             'stock': row['stock'],
             'images': row['images'],
+            'specifications': row['specifications'],
+            'tags': row['tags'],
+            'average_rating': row['average_rating'],
             'created_at': row['created_at'].isoformat(),
             'updated_at': row['updated_at'].isoformat()
         } for row in result]
 
-        # Total de productos
-        count_query = f"SELECT COUNT(*) FROM products WHERE 1=1 {' AND '.join(filters) if filters else ''}"
-        total_products = db.session.execute(count_query, params).scalar()
-
-        # Enviar datos de productos a Kafka
-        producer.send('search-topic', {'type': 'product', 'data': products})
-        print(f"Enviado a search-topic: {products}")
-        producer.flush()
-
-        # Loguear PageView
-        pageview = PageView(f"/api/products?page={page}&limit={limit}&category={category}")
-        pageview_logger.produce(pageview)
-
-        return jsonify({
-            'products': products,
-            'total': total_products,
-            'page': page,
-            'limit': limit
-        }), 200
-
+        return jsonify({'products': products}), 200
     except Exception as e:
+        print(f"Error al listar productos: {e}")
         return jsonify({'message': f'Error al listar productos: {str(e)}'}), 500
 
 
-# 1.2 Obtener detalles de un producto
-@app.route('/api/products/<int:productId>', methods=['GET'])
-def get_product(productId):
-    None
+# Cache y mecanismos de sincronización
+reviews_summary_cache = {}
+review_events = {}
+cache_lock = Lock()
 
+# Consumidor de respuestas de reseñas
+def consume_reviews_responses():
+    try:
+        print("Intentando inicializar el consumidor reviews de Kafka...")
+        consumer = KafkaConsumer(
+            'reviews-responses',
+            bootstrap_servers=KAFKA_BROKER,
+            value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+            group_id=f"product-service-{random.randint(1, 100000)}",
+            auto_offset_reset='latest'
+        )
+        print("Iniciando consumo del tópico 'reviews-responses'")
+
+        for message in consumer:
+            data = message.value
+            print("data," ,data)
+            product_id = data.get('product_id')
+
+            reviews_summary = {
+                'total_reviews': data.get('total_reviews', 0),
+                'average_rating': data.get('average_rating', 0.0),
+                'helpful_votes': data.get('helpful_votes', 0)
+            }
+
+            if product_id:
+                with cache_lock:
+                    reviews_summary_cache[product_id] = reviews_summary
+                    print(f"Reseñas almacenadas en cache para producto {product_id}")
+
+                    print("aaa:", reviews_summary)
+                    # Notificar al evento de sincronización
+                    if product_id in review_events:
+                        print("Entra noti")
+                        review_events[product_id].set()
+                        del review_events[product_id]
+
+    except Exception as e:
+        print(f"Error en el consumidor de Kafka para 'reviews-responses': {e}")
+
+# Iniciar consumidor en un hilo separado
+threading.Thread(target=consume_reviews_responses, daemon=True).start()
+
+# Endpoint para obtener detalles de un producto
+@app.route('/api/products/<uuid:product_id>', methods=['GET'])
+def get_product(product_id):
+    try:
+        # Consulta a la base de datos para obtener detalles del producto
+        query = """
+        SELECT id, name, description, price, category, stock, images, created_at, updated_at
+        FROM products
+        WHERE id = :product_id
+        """
+        result = db.session.execute(query, {'product_id': str(product_id)}).fetchone()
+
+        if not result:
+            return jsonify({"message": "Producto no encontrado"}), 404
+
+        product_details = {
+            'id': str(result['id']),
+            'name': result['name'],
+            'description': result['description'],
+            'price': result['price'],
+            'category': str(result['category']),
+            'stock': result['stock'],
+            'images': result['images'],
+            'created_at': result['created_at'].isoformat() if result['created_at'] else None,
+            'updated_at': result['updated_at'].isoformat() if result['updated_at'] else None,
+        }
+
+        # Crear un evento para sincronización
+        event = Event()
+        with cache_lock:
+            review_events[str(product_id)] = event
+
+        # Publicar solicitud de reseñas en Kafka
+        try:
+            producer.send('reviews-requests', {'product_id': str(product_id)})
+            producer.flush()
+            print(f"Solicitud de reseñas enviada a Kafka para producto {product_id}")
+        except Exception as kafka_error:
+            print(f"Error al enviar solicitud a Kafka: {str(kafka_error)}")
+            return jsonify({
+                "product": product_details,
+                "reviews_summary": [],
+                "message": "Error al solicitar las reseñas."
+            }), 500
+
+        # Esperar respuesta del consumidor de Kafka
+        timeout = 10  # Tiempo límite en segundos
+        if not event.wait(timeout):
+            print(f"Timeout esperando resumen de reseñas para producto {product_id}")
+            reviews_summary = []
+        else:
+            # Obtener resumen desde el cache
+            with cache_lock:
+                reviews_summary = reviews_summary_cache.pop(str(product_id), [])
+                print("Reseñas 1:",reviews_summary)
+
+        print("Reseñas 2:",reviews_summary)
+        return jsonify({
+            'product': product_details,
+            'reviews_summary': reviews_summary
+        }), 200
+
+    except Exception as e:
+        print(f"Error al obtener detalles del producto: {str(e)}")
+        return jsonify({"message": f"Error interno: {str(e)}"}), 500
 
 # 1.3 Crear un nuevo producto (admin)
 @app.route('/api/products', methods=['POST'])
@@ -156,6 +330,51 @@ def update_product(productId):
 @app.route('/api/products/<int:productId>', methods=['DELETE'])
 def delete_product(productId):
     None
+
+
+
+
+# # Consumidor de Kafka para actualizaciones de inventario
+# def consume_inventory_updates():
+#     consumer = KafkaConsumer(
+#         'inventory-updates',
+#         bootstrap_servers=KAFKA_BROKER,
+#         value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+#         group_id='product-service',
+#         auto_offset_reset='earliest'
+#     )
+#     print("Iniciando consumo del tópico 'inventory-updates'")
+
+#     for message in consumer:
+#         data = message.value
+#         product_id = data.get('product_id')
+#         quantity_change = data.get('quantity', 0)
+#         print(f"Actualización de inventario recibida para producto {product_id}, cambio en cantidad: {quantity_change}")
+
+#         with app.app_context():
+#             try:
+#                 query = "SELECT stock FROM products WHERE id = :product_id"
+#                 result = db.session.execute(query, {'product_id': product_id}).fetchone()
+
+#                 if result:
+#                     current_stock = result['stock']
+#                     new_stock = current_stock + quantity_change
+#                     if new_stock < 0:
+#                         print(f"Error: El inventario no puede ser negativo para producto {product_id}")
+#                         continue
+
+#                     update_query = "UPDATE products SET stock = :new_stock, updated_at = :updated_at WHERE id = :product_id"
+#                     db.session.execute(update_query, {
+#                         'new_stock': new_stock,
+#                         'updated_at': datetime.utcnow(),
+#                         'product_id': product_id
+#                     })
+#                     db.session.commit()
+#                     print(f"Inventario actualizado para producto {product_id}: {new_stock}")
+#                 else:
+#                     print(f"Producto {product_id} no encontrado.")
+#             except Exception as e:
+#                 print(f"Error al actualizar inventario para producto {product_id}: {str(e)}")
 
 
 if __name__ == '__main__':

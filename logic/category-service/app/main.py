@@ -1,126 +1,113 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from kafka import KafkaProducer
-import os
+from kafka import KafkaConsumer, KafkaProducer
 import json
+import os
+import threading
+import sys
 import random
+from flask import Response
 
-# Configurar la app Flask
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
+# Configuración de Flask y Kafka
 app = Flask(__name__)
 CORS(app)
 
 # Configuración de la base de datos
-database_url = os.getenv("DATABASE_URL", "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore")
+database_url = os.getenv(
+    "DATABASE_URL", 
+    "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore"
+)
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
 db = SQLAlchemy(app)
 
-# Configuración del productor de Kafka
+# Configuración de Kafka
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 producer = KafkaProducer(
-    bootstrap_servers=os.getenv("KAFKA_BROKER", "kafka.default.svc.cluster.local:9092"),
+    bootstrap_servers=KAFKA_BROKER,
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-# Clase PageView
-class PageView:
-    def __init__(self, url: str):
-        self._url = url
-
-    @property
-    def url(self):
-        return self._url
-
-    def to_json(self):
-        return json.dumps({"pageview": {"url": self.url}})
-
-# Clase PageViewKafkaLogger
-class PageViewKafkaLogger:
-    def __init__(self, broker: str = 'kafka.default.svc.cluster.local:9092'):
-        self.producer = KafkaProducer(
-            bootstrap_servers=broker,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+# Consumidor de Kafka para solicitudes de búsqueda
+def consume_search_requests():
+    try:
+        print("Intentando inicializar el consumidor de Kafka...")
+        consumer = KafkaConsumer(
+            'search-requests',
+            bootstrap_servers=KAFKA_BROKER,
+            value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+            group_id=f"category-service-{random.randint(1, 100000)}",
+            auto_offset_reset='latest'
         )
+        print("Iniciando consumo del tópico 'search-requests'")
 
-    def produce(self, pageview: PageView):
-        try:
-            # Enviar un mensaje al tópico 'pageview'
-            self.producer.send(
-                topic='pageview',
-                key=f"{random.randrange(999999)}".encode(),
-                value=json.loads(pageview.to_json())
-            )
-            self.producer.flush()
-        except Exception as e:
-            print(f"Error enviando PageView a Kafka: {e}")
+        for message in consumer:
+            data = message.value
+            query = data.get('query', '')
 
-pageview_logger = PageViewKafkaLogger()
+            # Crear un contexto de solicitud falso
+            with app.test_request_context(f"/api/categories?q={query}"):
+                # Llamar directamente al endpoint
+                response: Response = app.full_dispatch_request()
 
-# Listar categorías
+                if response.status_code == 200:
+                    categories = response.get_json()['categories']
+                    # Publicar resultados en Kafka
+                    producer.send('categories-responses', {'type': 'category', 'data': categories})
+                    producer.flush()
+                    print(f"Respuesta enviada a Kafka: {categories}")
+                else:
+                    print(f"Error al consultar categorías: {response.status_code}")
+
+    except Exception as e:
+        print(f"Error en el consumidor de Kafka para 'search-requests': {e}")
+
+
+# Iniciar el consumidor en un hilo separado
+threading.Thread(target=consume_search_requests, daemon=True).start()
+
+# Endpoint para listar categorías
 @app.route('/api/categories', methods=['GET'])
 def list_categories():
     try:
-        query_param = request.args.get('q', '').strip()
+        # Obtener los parámetros de consulta
+        query = request.args.get('q', '').lower()
         parent_category = request.args.get('parent')
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 10))
         offset = (page - 1) * limit
 
-        # Construir consulta
+        # Construir consulta base
         base_query = """
         SELECT id, name, description, parent_category, image_url, active
         FROM categories
-        WHERE 1=1
+        WHERE active = TRUE AND LOWER(name) LIKE :query
         """
-        filters = []
-        params = {}
-
-        if query_param:
-            filters.append("name ILIKE :query_param")
-            params['query_param'] = f"%{query_param}%"
+        params = {'query': f"%{query}%"}
         if parent_category:
-            filters.append("parent_category = :parent_category")
+            base_query += " AND parent_category = :parent_category"
             params['parent_category'] = parent_category
-
-        if filters:
-            base_query += " AND " + " AND ".join(filters)
 
         base_query += " LIMIT :limit OFFSET :offset"
         params.update({'limit': limit, 'offset': offset})
 
-        # Consultar la base de datos
+        # Ejecutar consulta
         result = db.session.execute(base_query, params).fetchall()
 
-        # Transformar resultados
+        # Procesar resultados
         categories = [{
             'id': str(row['id']),
             'name': row['name'],
             'description': row['description'],
             'parent_category': str(row['parent_category']) if row['parent_category'] else None,
-            'image_url': row['image_url'],
-            'active': row['active'],
+            'image_url': row['image_url']
         } for row in result]
 
-        # Total de categorías
-        count_query = f"SELECT COUNT(*) FROM categories WHERE 1=1 {' AND '.join(filters) if filters else ''}"
-        total_categories = db.session.execute(count_query, params).scalar()
-
-        # Enviar datos de categorías a Kafka
-        producer.send('search-topic', {'type': 'category', 'data': categories})
-        producer.flush()
-
-        # Loguear PageView
-        pageview = PageView(f"/api/categories?page={page}&limit={limit}&q={query_param}&parent={parent_category}")
-        pageview_logger.produce(pageview)
-
-        return jsonify({
-            'categories': categories,
-            'total': total_categories,
-            'page': page,
-            'limit': limit
-        }), 200
-
+        return jsonify({'categories': categories}), 200
     except Exception as e:
         return jsonify({'message': f'Error al listar categorías: {str(e)}'}), 500
 
@@ -145,4 +132,4 @@ def delete_category(category_id):
     None
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000,debug=True)

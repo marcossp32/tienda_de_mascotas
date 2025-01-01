@@ -8,6 +8,9 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 import logging
 import os
+from kafka import KafkaProducer, KafkaConsumer
+import threading
+
 
 app = Flask(__name__)
 CORS(app)
@@ -20,6 +23,12 @@ db = SQLAlchemy(app)
 
 # Configuración de clave secreta para JWT
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "supersecretkey")
+
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
+producer = KafkaProducer(
+    bootstrap_servers=KAFKA_BROKER,
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
 
 # Función para crear token JWT
 def create_jwt_token(user_id):
@@ -164,10 +173,100 @@ def get_user_profile():
 def update_user_profile():
     None
 
-# 3.5 Listar direcciones de envío
+# 3.5 Listar direcciones de envío con filtro de user_id
 @app.route('/api/users/addresses', methods=['GET'])
 def list_addresses():
-    None
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({"message": "El campo 'user_id' es obligatorio."}), 400
+
+        # Consultar direcciones del usuario
+        query = """
+        SELECT id, street, city, state, country, zip_code, is_default
+        FROM addresses
+        WHERE user_id = :user_id
+        """
+        params = {"user_id": user_id}
+        addresses = db.session.execute(query, params).fetchall()
+
+        if not addresses:
+            return jsonify({"message": "No se encontraron direcciones."}), 404
+
+        response = [{
+            "address_id": str(row["id"]),
+            "street": row["street"],
+            "city": row["city"],
+            "state": row["state"],
+            "country": row["country"],
+            "zip_code": row["zip_code"],
+            "is_default": row["is_default"]
+        } for row in addresses]
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        print(f"Error al listar direcciones: {e}")
+        return jsonify({"message": f"Error interno: {str(e)}"}), 500
+
+
+# Consumidor de Kafka para solicitudes de direcciones
+def consume_address_requests():
+    consumer = KafkaConsumer(
+        "address-requests",
+        bootstrap_servers=KAFKA_BROKER,
+        value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+        group_id="user-service",
+        auto_offset_reset="earliest",
+    )
+    print("Iniciando consumo del tópico 'address-requests'")
+
+    for message in consumer:
+        data = message.value
+        user_id = data.get("user_id")
+        print(f"Solicitud de dirección recibida para user_id: {user_id}")
+
+        with app.app_context():
+            try:
+                # Consultar la dirección predeterminada del usuario
+                query = """
+                SELECT id, street, city, state, country, zip_code, is_default
+                FROM addresses
+                WHERE user_id = :user_id AND is_default = TRUE
+                """
+                params = {"user_id": user_id}
+                result = db.session.execute(query, params).fetchone()
+
+                if not result:
+                    response = {"user_id": user_id, "address": None}
+                else:
+                    response = {
+                        "user_id": user_id,
+                        "address": {
+                            "address_id": str(result["id"]),
+                            "street": result["street"],
+                            "city": result["city"],
+                            "state": result["state"],
+                            "country": result["country"],
+                            "zip_code": result["zip_code"],
+                            "is_default": result["is_default"]
+                        }
+                    }
+
+                # Publicar la respuesta en Kafka
+                producer.send("address-responses", response)
+                producer.flush()
+                print(f"Respuesta de dirección publicada en Kafka: {response}")
+
+            except Exception as e:
+                print(f"Error al procesar la solicitud de dirección: {e}")
+
+
+# Iniciar consumidor en un hilo separado
+threading.Thread(target=consume_address_requests, daemon=True).start()
+
+
+
 
 # 3.6 Agregar dirección de envío
 @app.route('/api/users/addresses', methods=['POST'])
