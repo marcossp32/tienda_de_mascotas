@@ -19,7 +19,7 @@ spec:
         image: search-service:latest
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 5002
+        - containerPort: 5000
         env:
         - name: KAFKA_BROKER
           value: "kafka.default.svc.cluster.local:9092"

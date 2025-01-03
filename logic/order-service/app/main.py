@@ -8,6 +8,8 @@ import os
 import sys
 import random
 from flask_sqlalchemy import SQLAlchemy
+from functools import wraps
+import jwt
 
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -28,6 +30,37 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        # Verificar si el token está presente en el encabezado Authorization
+        if 'Authorization' in request.headers:
+            try:
+                auth_header = request.headers['Authorization']
+                token = auth_header.split(" ")[1]  # Extraer el token después de "Bearer"
+            except IndexError:
+                return jsonify({'message': 'Formato del token inválido'}), 401
+
+        if not token:
+            return jsonify({'message': 'Token faltante'}), 401
+
+        try:
+            # Decodificar el token
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            request.user_id = data['user_id']  # Pasar user_id al contexto de la solicitud
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token expirado'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token inválido'}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated
+
 cart_items_response = []
 cart_event = threading.Event()
 
@@ -42,7 +75,6 @@ def consume_cart_items_response():
     print("cart consumer iniciado")
     for message in consumer:
         data = message.value
-        print("bbbb",data)
         cart_items_response.append(data)
         cart_event.set()
         break
@@ -66,7 +98,6 @@ def consume_address_response():
     print("address consumer iniciado")
     for message in consumer:
         data = message.value
-        print("aaaa",data)
         address_response.append(data)
         address_event.set()
         break
@@ -75,22 +106,30 @@ threading.Thread(target=consume_address_response, daemon=True).start()
 
 # 5.1 Crear un nuevo pedido
 @app.route('/api/orders', methods=['POST'])
+@token_required
 def create_order():
     try:
         data = request.get_json()
         user_id = data.get("user_id")
         payment_method = data.get("payment_method")
+        token = request.headers.get('Authorization').split(" ")[1]  # Extraer el token
+
+        # Publicar solicitud en Kafka con el token
+        request_data = {
+            "user_id": user_id,
+            "token": token  
+        }
 
         if not user_id or not payment_method:
             return jsonify({"message": "Faltan campos obligatorios (user_id, payment_method)."}), 400
 
         # 1. Solicitar dirección del usuario
-        producer.send("address-requests", {"user_id": user_id})
+        producer.send("address-requests", request_data)
         producer.flush()
         print(f"Solicitud de dirección enviada a Kafka para user_id {user_id}")
 
         # 2. Solicitar ítems del carrito
-        producer.send("cart-items-requests", {"user_id": user_id})
+        producer.send("cart-items-requests", request_data)
         producer.flush()
         print(f"Solicitud de ítems del carrito enviada a Kafka para user_id {user_id}")
 
@@ -109,7 +148,6 @@ def create_order():
 
         cart_response = cart_items_response[0]
 
-        print("Items del carrito: ", cart_items_response)
 
         if not isinstance(cart_response, dict) or "response" not in cart_response:
             return jsonify({"message": "Formato inválido del mensaje del carrito."}), 500
@@ -168,7 +206,7 @@ def create_order():
             print("Pedido y sus ítems guardados en la base de datos.")
         except Exception as e:
             db.session.rollback()
-            print(f"❌ Error al guardar el pedido: {e}")
+            print(f"Error al guardar el pedido: {e}")
             return jsonify({"message": "Error al crear el pedido en la base de datos."}), 500
 
         # Publicar el pedido en Kafka para registro
@@ -176,7 +214,7 @@ def create_order():
 
         # 4. Actualizar inventario
         for item in cart_items:
-            inventory_update = {"product_id": item["product_id"], "quantity": -item["quantity"]}
+            inventory_update = {"product_id": item["product_id"], "quantity": -item["quantity"], "token":token}
             producer.send("inventory-updates", inventory_update)
         producer.flush()
         print("Solicitudes de actualización de inventario enviadas a Kafka.")
@@ -189,21 +227,6 @@ def create_order():
         print(error_message)
         return jsonify({"message": error_message}), 500
 
-
-# 5.2 Listar pedidos del usuario
-@app.route('/api/orders', methods=['GET'])
-def list_orders():
-    None
-
-# 5.3 Obtener detalles de un pedido
-@app.route('/api/orders/<int:order_id>', methods=['GET'])
-def get_order_details(order_id):
-    None
-
-# 5.4 Cancelar un pedido
-@app.route('/api/orders/<int:order_id>/cancel', methods=['POST'])
-def cancel_order(order_id):
-    None
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000,debug=True)

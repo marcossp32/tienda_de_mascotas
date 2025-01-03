@@ -5,6 +5,8 @@ import os
 import random
 import sys
 import logging
+from functools import wraps
+import jwt
 
 # Configuración de logging
 logging.basicConfig(
@@ -27,6 +29,37 @@ try:
 except Exception as e:
     logging.error(f"Error al inicializar el productor de Kafka: {e}")
     sys.exit(1)
+
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        # Verificar si el token está presente en el encabezado Authorization
+        if 'Authorization' in request.headers:
+            try:
+                auth_header = request.headers['Authorization']
+                token = auth_header.split(" ")[1]  # Extraer el token después de "Bearer"
+            except IndexError:
+                return jsonify({'message': 'Formato del token inválido'}), 401
+
+        if not token:
+            return jsonify({'message': 'Token faltante'}), 401
+
+        try:
+            # Decodificar el token
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            request.user_id = data['user_id']  # Pasar user_id al contexto de la solicitud
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token expirado'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token inválido'}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated
 
 def consume_last_message(topic):
     """Consume el último mensaje disponible en el tópico."""
@@ -64,14 +97,18 @@ def consume_last_message(topic):
         consumer.close()
 
 @app.route('/api/search', methods=['GET'])
+@token_required
 def search():
     """Endpoint de búsqueda."""
     try:
         query = request.args.get('q', '').strip().lower()
-        logging.info(f"Query recibida: {query}")
+        token = request.headers.get('Authorization').split(" ")[1]  # Extraer el token
 
-        # Publicar solicitud en Kafka
-        request_data = {"query": query}
+        # Publicar solicitud en Kafka con el token
+        request_data = {
+            "query": query,
+            "token": token  
+        }
         try:
             producer.send('search-requests', request_data)
             producer.flush()
@@ -114,4 +151,4 @@ def search():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5002, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

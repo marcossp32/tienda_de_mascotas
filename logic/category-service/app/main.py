@@ -8,13 +8,14 @@ import threading
 import sys
 import random
 from flask import Response
+from functools import wraps
+import jwt
 
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
 # Configuración de Flask y Kafka
 app = Flask(__name__)
-CORS(app)
 
 # Configuración de la base de datos
 database_url = os.getenv(
@@ -32,6 +33,37 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        # Verificar si el token está presente en el encabezado Authorization
+        if 'Authorization' in request.headers:
+            try:
+                auth_header = request.headers['Authorization']
+                token = auth_header.split(" ")[1]  # Extraer el token después de "Bearer"
+            except IndexError:
+                return jsonify({'message': 'Formato del token inválido'}), 401
+
+        if not token:
+            return jsonify({'message': 'Token faltante'}), 401
+
+        try:
+            # Decodificar el token
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            request.user_id = data['user_id']  # Pasar user_id al contexto de la solicitud
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token expirado'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token inválido'}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated
+
 # Consumidor de Kafka para solicitudes de búsqueda
 def consume_search_requests():
     try:
@@ -47,11 +79,16 @@ def consume_search_requests():
 
         for message in consumer:
             data = message.value
-            query = data.get('query', '')
+            query = data.get("query", "")
+            token = data.get("token")
 
-            # Crear un contexto de solicitud falso
-            with app.test_request_context(f"/api/categories?q={query}"):
-                # Llamar directamente al endpoint
+            # Crear encabezados para simular la solicitud
+            headers = {
+                'Authorization': f'Bearer {token}'
+            }
+            
+            # Usar app.test_request_context con encabezados simulados
+            with app.test_request_context(f"/api/categories?q={query}", headers=headers):
                 response: Response = app.full_dispatch_request()
 
                 if response.status_code == 200:
@@ -72,6 +109,7 @@ threading.Thread(target=consume_search_requests, daemon=True).start()
 
 # Endpoint para listar categorías
 @app.route('/api/categories', methods=['GET'])
+@token_required
 def list_categories():
     try:
         # Obtener los parámetros de consulta
@@ -111,25 +149,7 @@ def list_categories():
     except Exception as e:
         return jsonify({'message': f'Error al listar categorías: {str(e)}'}), 500
 
-# 2.2 Obtener detalles de una categoría
-@app.route('/api/categories/<int:category_id>', methods=['GET'])
-def get_category_details(category_id):
-    None
 
-# 2.3 Crear una nueva categoría (admin)
-@app.route('/api/categories', methods=['POST'])
-def create_category():
-    None
-
-# 2.4 Actualizar una categoría (admin)
-@app.route('/api/categories/<int:category_id>', methods=['PUT'])
-def update_category(category_id):
-    None
-
-# 2.5 Eliminar una categoría (admin)
-@app.route('/api/categories/<int:category_id>', methods=['DELETE'])
-def delete_category(category_id):
-    None
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000,debug=True)

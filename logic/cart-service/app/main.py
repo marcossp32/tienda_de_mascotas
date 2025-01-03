@@ -12,6 +12,9 @@ from threading import Thread, Event, Lock
 from queue import Queue, Empty
 import time
 
+from functools import wraps
+import jwt
+
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -30,6 +33,37 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        # Verificar si el token está presente en el encabezado Authorization
+        if 'Authorization' in request.headers:
+            try:
+                auth_header = request.headers['Authorization']
+                token = auth_header.split(" ")[1]  # Extraer el token después de "Bearer"
+            except IndexError:
+                return jsonify({'message': 'Formato del token inválido'}), 401
+
+        if not token:
+            return jsonify({'message': 'Token faltante'}), 401
+
+        try:
+            # Decodificar el token
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            request.user_id = data['user_id']  # Pasar user_id al contexto de la solicitud
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token expirado'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token inválido'}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated
+
 # Consumidor de Kafka para solicitudes de direcciones
 def consume_cart_items_request():
     try:
@@ -45,9 +79,15 @@ def consume_cart_items_request():
         for message in consumer:
             data = message.value
             user_id = data.get("user_id")
-            print(f"Solicitud de dirección recibida para user_id: {user_id}")
+            token = data.get("token")
 
-            with app.test_request_context(f"/api/cart?user_id={user_id}"):
+            # Crear encabezados para simular la solicitud
+            headers = {
+                'Authorization': f'Bearer {token}'
+            }
+            
+            # Usar app.test_request_context con encabezados simulados
+            with app.test_request_context(f"/api/cart?user_id={user_id}", headers=headers):
                 # Llamar directamente al endpoint
                     response = get_cart()
                     status_code = response[1]
@@ -70,6 +110,7 @@ Thread(target=consume_cart_items_request, daemon=True).start()
 
 # 4.1 Obtener carrito actual y publicar en Kafka
 @app.route('/api/cart', methods=['GET'])
+@token_required
 def get_cart():
     try:
         # Simulamos un usuario autenticado
@@ -140,8 +181,8 @@ def get_cart():
 
 
 # Diccionarios y locks
-availability_queues = {}
-availability_lock = Lock()
+product_availability_response = []
+product_availability_event = Event()
 
 def consume_availability_responses():
     consumer = KafkaConsumer(
@@ -155,55 +196,42 @@ def consume_availability_responses():
     print("[Cart-Service] Esperando respuestas de disponibilidad en Kafka...")
 
     for message in consumer:
-        response = message.value
-        product_id = response.get('product_id')
-        timestamp = time.time()
+        data = message.value
+        product_availability_response.append(data)
+        product_availability_event.set()
+        break
 
-        print(f"[Cart-Service] {datetime.now()} Mensaje recibido de Kafka: {response}, Timestamp: {timestamp}")
-
-        with availability_lock:
-            # Colocar el mensaje en la cola si existe
-            if product_id in availability_queues:
-                try:
-                    availability_queues[product_id].put_nowait(response)
-                    print(f"[Cart-Service] Respuesta encolada para product_id={product_id}")
-                except Full:
-                    print(f"[Cart-Service] La cola para product_id={product_id} está llena. Respuesta descartada.")
+Thread(target=consume_availability_responses, daemon=True).start()
 
 @app.route('/api/cart/items', methods=['POST'])
+@token_required
 def add_to_cart():
     try:
         data = request.get_json()
         product_id = data.get('product_id')
         quantity = data.get('quantity', 1)
         user_id = data.get('user_id')
+        token = request.headers.get('Authorization').split(" ")[1]
 
         if not product_id or not user_id:
             return jsonify({"message": "Los campos 'product_id' y 'user_id' son obligatorios."}), 400
 
         print(f"[Cart-Service] Solicitud recibida: user_id={user_id}, product_id={product_id}, cantidad={quantity}")
 
-        # Crear una cola para manejar la respuesta si no existe
-        with availability_lock:
-            if product_id not in availability_queues:
-                availability_queues[product_id] = Queue(maxsize=1)
-
         # Publicar solicitud de disponibilidad
-        availability_request = {"product_id": product_id, "quantity": quantity}
+        availability_request = {"product_id": product_id, "quantity": quantity,"token": token  }
         producer.send('product-availability-requests', availability_request)
         producer.flush()
         print(f"[Cart-Service] {datetime.now()} Solicitud de disponibilidad enviada: {availability_request}")
 
-        # Esperar respuesta con timeout
-        try:
-            response = availability_queues[product_id].get(timeout=15)
-            print(f"[Cart-Service] {datetime.now()} Respuesta procesada para product_id={product_id}: {response}")
-        except Empty:
-            
-            timestamp = time.time()
+        # Esperar respuesta de dirección
+        if not product_availability_event.wait(timeout=20):
+            return jsonify({"message": "Timeout al obtener la dirección del usuario."}), 500
 
-            print(f"[Cart-Service] Timeout esperando disponibilidad para product_id={product_id}, time:{timestamp}")
-            return jsonify({"message": "No se pudo verificar la disponibilidad del producto a tiempo."}), 500
+        if not product_availability_response:
+            return jsonify({"message": "No se encontró dirección para el usuario."}), 404
+
+        response = product_availability_response[0]
 
         # Procesar la respuesta
         if not response.get('available', False):
@@ -260,10 +288,6 @@ def add_to_cart():
             )
             print(f"[Cart-Service] Total del carrito actualizado a {new_total}")
 
-        # Limpieza de la cola después del procesamiento
-        with availability_lock:
-            if product_id in availability_queues:
-                del availability_queues[product_id]
 
         return jsonify({"message": "Producto añadido al carrito exitosamente."}), 200
 
@@ -271,25 +295,7 @@ def add_to_cart():
         print(f"[Cart-Service] Error al añadir al carrito: {str(e)}")
         return jsonify({"message": f"Error interno: {str(e)}"}), 500
 
-# Iniciar consumidor de Kafka
-Thread(target=consume_availability_responses, daemon=True).start()
 
-
-
-# 4.3 Actualizar cantidad de un producto en el carrito
-@app.route('/api/cart/items/<int:item_id>', methods=['PUT'])
-def update_cart_item(item_id):
-    None
-
-# 4.4 Eliminar producto del carrito
-@app.route('/api/cart/items/<int:item_id>', methods=['DELETE'])
-def delete_cart_item(item_id):
-    None
-
-# 4.5 Vaciar carrito
-@app.route('/api/cart', methods=['DELETE'])
-def clear_cart():
-    None
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000,debug=True)

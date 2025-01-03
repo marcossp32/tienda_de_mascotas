@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import datetime
-import uuid  # Para generar UUIDs
+import uuid  
 from functools import wraps
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -17,7 +17,6 @@ sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
 app = Flask(__name__)
-CORS(app)
 
 # Configuración de la base de datos y SQLAlchemy desde la variable de entorno DATABASE_URL
 database_url = os.getenv("DATABASE_URL", "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore")
@@ -26,7 +25,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Configuración de clave secreta para JWT
-app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "supersecretkey")
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 producer = KafkaProducer(
@@ -38,40 +37,38 @@ producer = KafkaProducer(
 def create_jwt_token(user_id):
     token = jwt.encode({
         'user_id': user_id,
-        'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)  # Expiración en 24 horas
+        'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
     }, app.config['SECRET_KEY'], algorithm="HS256")
     return token
 
-# Decorador para verificar el token JWT en rutas protegidas
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.headers.get('x-access-token')
+        token = None
+
+        # Verificar si el token está presente en el encabezado Authorization
+        if 'Authorization' in request.headers:
+            try:
+                auth_header = request.headers['Authorization']
+                token = auth_header.split(" ")[1]  # Extraer el token después de "Bearer"
+            except IndexError:
+                return jsonify({'message': 'Formato del token inválido'}), 401
+
         if not token:
-            return jsonify({'message': 'Token es requerido'}), 401
+            return jsonify({'message': 'Token faltante'}), 401
+
         try:
-            # Decodificar el token JWT
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            user_id = data.get('user_id')
-
-            # Verificar si el usuario existe en la base de datos
-            current_user = db.session.execute(
-                "SELECT id, username, email FROM users WHERE id = :user_id",
-                {'user_id': user_id}
-            ).fetchone()
-
-            if not current_user:
-                return jsonify({'message': 'Token inválido'}), 401
-
+            # Decodificar el token
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            request.user_id = data['user_id']  # Pasar user_id al contexto de la solicitud
         except jwt.ExpiredSignatureError:
-            return jsonify({'message': 'El token ha expirado'}), 401
+            return jsonify({'message': 'Token expirado'}), 401
         except jwt.InvalidTokenError:
             return jsonify({'message': 'Token inválido'}), 401
-        except Exception as e:
-            return jsonify({'message': f'Error procesando el token: {str(e)}'}), 401
 
-        # Pasar el usuario actual como argumento a la función protegida
-        return f(current_user, *args, **kwargs)
+        return f(*args, **kwargs)
+
     return decorated
 
 # 3.1 Registrar un nuevo usuario
@@ -167,18 +164,9 @@ def login_user():
 
 
 
-# 3.3 Obtener perfil de usuario
-@app.route('/api/users/profile', methods=['GET'])
-def get_user_profile():
-    None
-
-# 3.4 Actualizar perfil de usuario
-@app.route('/api/users/profile', methods=['PUT'])
-def update_user_profile():
-    None
-
 # 3.5 Listar direcciones de envío con filtro de user_id
 @app.route('/api/users/addresses', methods=['GET'])
+@token_required
 def list_addresses():
     try:
         user_id = request.args.get('user_id')
@@ -231,9 +219,14 @@ def consume_address_requests():
         for message in consumer:
             data = message.value
             user_id = data.get("user_id")
-            print(f"Solicitud de dirección recibida para user_id: {user_id}")
+            token = data.get("token")
 
-            with app.test_request_context(f"/api/users/addresses?user_id={user_id}"):
+            # Crear encabezados para simular la solicitud
+            headers = {
+                'Authorization': f'Bearer {token}'
+            }
+
+            with app.test_request_context(f"/api/users/addresses?user_id={user_id}", headers=headers):
                 response = list_addresses()
                 status_code = response[1]
 
@@ -253,21 +246,6 @@ def consume_address_requests():
 # Iniciar consumidor en un hilo separado
 threading.Thread(target=consume_address_requests, daemon=True).start()
 
-
-# 3.6 Agregar dirección de envío
-@app.route('/api/users/addresses', methods=['POST'])
-def add_address():
-    None
-
-# 3.7 Actualizar dirección de envío
-@app.route('/api/users/addresses/<int:address_id>', methods=['PUT'])
-def update_address(address_id):
-    None
-
-# 3.8 Eliminar dirección de envío
-@app.route('/api/users/addresses/<int:address_id>', methods=['DELETE'])
-def delete_address(address_id):
-    None
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000,debug=True)

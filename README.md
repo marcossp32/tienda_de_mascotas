@@ -1,7 +1,7 @@
 
 # API RESTful para Tienda de Mascotas
 
-Este proyecto contiene las instrucciones necesarias para configurar y desplegar una API RESTful para una tienda de mascotas, utilizando herramientas como Docker, Minikube, Istio y Kong.
+Este proyecto contiene las instrucciones necesarias para configurar y desplegar una API RESTful para una tienda de mascotas, utilizando herramientas como Docker, Minikube, Kafka y Kong.
 
 ## Documentación Adicional
 
@@ -184,19 +184,44 @@ curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/
 ```
 
 
-<!-- curl -X GET "http://mini:30142/api/search?q=perro" -H "Content-Type: application/json" -->
 
-<!-- curl -X POST http://mini:30142/api/cart/items \
+
+<!-- Curl para probar la busqueda -->
+<!-- curl -X GET http://mini:30237/api/search?q=perro \
 -H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" -->
+
+<!-- Curl para detalles del prducto y resumen de reseñas -->
+<!-- curl -X GET http://mini:30237/api/products/a745e2b8-96ef-473d-934d-2e76db91d8d7 \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" -->
+
+<!-- Curl para obtener reseñas completas de un producto -->
+<!-- curl -X GET http://mini:30237/api/products/a745e2b8-96ef-473d-934d-2e76db91d8d7/reviews \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" -->
+
+<!-- Curl para añadir items al carrito -->
+<!-- curl -X POST http://mini:30237/api/cart/items \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" \
 -d '{
-  "product_id": "6a8afe13-aa41-4151-8980-d0d5fa765c75",
-  "quantity": 2,
-  "user_id": "558b573e-26ab-45a7-8555-b248356b0375"
+  "user_id": "08eb1816-f3df-4661-8ac2-fc4a06067fed",
+  "product_id": "a745e2b8-96ef-473d-934d-2e76db91d8d7",
+  "quantity": 2
 }' -->
 
-<!-- curl -X POST http://mini:30142/api/orders \
+<!-- Curl para ver el carrito -->
+<!-- curl -X GET http://mini:30237/api/cart?user_id=08eb1816-f3df-4661-8ac2-fc4a06067fed \
 -H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" -->
+
+<!-- Curl para hacer un pedido -->
+<!-- curl -X POST http://mini:30237/api/orders \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" \
 -d '{
-  "user_id": "558b573e-26ab-45a7-8555-b248356b0375",
+  "user_id": "08eb1816-f3df-4661-8ac2-fc4a06067fed",
   "payment_method": "credit_card"
 }' -->
+

@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from kafka import KafkaConsumer, KafkaProducer
 import threading
@@ -6,6 +6,8 @@ import json
 import os
 import sys
 import requests
+from functools import wraps
+import jwt
 
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
@@ -26,6 +28,38 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
+
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        # Verificar si el token está presente en el encabezado Authorization
+        if 'Authorization' in request.headers:
+            try:
+                auth_header = request.headers['Authorization']
+                token = auth_header.split(" ")[1]  # Extraer el token después de "Bearer"
+            except IndexError:
+                return jsonify({'message': 'Formato del token inválido'}), 401
+
+        if not token:
+            return jsonify({'message': 'Token faltante'}), 401
+
+        try:
+            # Decodificar el token
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            request.user_id = data['user_id']  # Pasar user_id al contexto de la solicitud
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token expirado'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token inválido'}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated
+
 def consume_reviews_requests():
     try:
         consumer = KafkaConsumer(
@@ -40,11 +74,23 @@ def consume_reviews_requests():
         for message in consumer:
             data = message.value
             product_id = data.get('product_id')
-            print(f"Solicitud recibida en Kafka para producto {product_id}")
+            token = data.get("token")
+
+            if not token:
+                print(f"Token faltante en el mensaje del producto {product_id}")
+                continue 
+
+            # Crear encabezados para simular la solicitud
+            headers = {
+                'Authorization': f'Bearer {token}'
+            }
 
             # Realizar una llamada al endpoint para obtener las reseñas
             try:
-                response = requests.get(f"http://localhost:5000/api/products/{product_id}/reviews")
+                response = requests.get(
+                    f"http://localhost:5000/api/products/{product_id}/reviews",
+                    headers=headers 
+                )
                 
                 if response.status_code == 200:
                     reviews = response.json().get('reviews', [])
@@ -84,6 +130,7 @@ threading.Thread(target=consume_reviews_requests, daemon=True).start()
 
 # Endpoint para listar reseñas de un producto
 @app.route('/api/products/<uuid:product_id>/reviews', methods=['GET'])
+@token_required
 def list_reviews(product_id):
     try:
         # Consultar reseñas desde la base de datos
@@ -113,21 +160,6 @@ def list_reviews(product_id):
         print(f"Error al obtener reseñas: {str(e)}")
         return jsonify({"message": f"Error interno: {str(e)}"}), 500
 
-
-# 6.2 Agregar una reseña a un producto
-@app.route('/api/products/<int:product_id>/reviews', methods=['POST'])
-def add_review(product_id):
-    None
-
-# 6.3 Actualizar una reseña
-@app.route('/api/products/<int:product_id>/reviews/<int:review_id>', methods=['PUT'])
-def update_review(product_id, review_id):
-    None
-
-# 6.4 Eliminar una reseña
-@app.route('/api/products/<int:product_id>/reviews/<int:review_id>', methods=['DELETE'])
-def delete_review(product_id, review_id):
-    None
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000,debug=True)

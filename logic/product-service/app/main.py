@@ -10,7 +10,8 @@ from datetime import datetime
 import random
 import sys
 from uuid import UUID
-
+from functools import wraps
+import jwt
 
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
@@ -18,7 +19,7 @@ sys.stderr.reconfigure(line_buffering=True)
 
 # Configuración de Flask
 app = Flask(__name__)
-CORS(app)
+
 database_url = os.getenv("DATABASE_URL", "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore")
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -31,6 +32,37 @@ producer = KafkaProducer(
     bootstrap_servers=KAFKA_BROKER,
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
+
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        # Verificar si el token está presente en el encabezado Authorization
+        if 'Authorization' in request.headers:
+            try:
+                auth_header = request.headers['Authorization']
+                token = auth_header.split(" ")[1]  # Extraer el token después de "Bearer"
+            except IndexError:
+                return jsonify({'message': 'Formato del token inválido'}), 401
+
+        if not token:
+            return jsonify({'message': 'Token faltante'}), 401
+
+        try:
+            # Decodificar el token
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            request.user_id = data['user_id']  # Pasar user_id al contexto de la solicitud
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token expirado'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token inválido'}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated
 
 def consume_availability_requests():
     try:
@@ -47,10 +79,15 @@ def consume_availability_requests():
             data = message.value
             product_id = data.get('product_id')
             quantity = data.get('quantity', 1)
-            print(f"Solicitud de disponibilidad recibida para producto {product_id}, cantidad {quantity}")
+            token = data.get("token")
 
-            # Crear un contexto de solicitud falso para llamar al endpoint `/api/products`
-            with app.test_request_context(f"/api/products?q={product_id}"):
+            # Crear encabezados para simular la solicitud
+            headers = {
+                'Authorization': f'Bearer {token}'
+            }
+            
+            # Usar app.test_request_context con encabezados simulados
+            with app.test_request_context(f"/api/products?q={product_id}", headers=headers):
                 try:
                     response = list_products()
 
@@ -112,9 +149,16 @@ def consume_search_requests():
         for message in consumer:
             data = message.value
             query = data.get('query', '')
+            token = data.get("token")
 
-            # Crear un contexto de solicitud falso
-            with app.test_request_context(f"/api/products?q={query}"):
+            # Crear encabezados para simular la solicitud
+            headers = {
+                'Authorization': f'Bearer {token}'
+            }
+            
+            # Usar app.test_request_context con encabezados simulados
+            with app.test_request_context(f"/api/products?q={query}", headers=headers):
+            
                 # Llamar directamente al endpoint
                 response = list_products()
                 status_code = response[1]
@@ -181,6 +225,7 @@ threading.Thread(target=consume_inventory_updates, daemon=True).start()
 
 
 @app.route('/api/products', methods=['GET'])
+@token_required
 def list_products():
     try:
         # Obtener los parámetros de consulta
@@ -292,6 +337,7 @@ threading.Thread(target=consume_reviews_responses, daemon=True).start()
 
 # Endpoint para obtener detalles de un producto
 @app.route('/api/products/<uuid:product_id>', methods=['GET'])
+@token_required
 def get_product(product_id):
     try:
         # Consulta a la base de datos para obtener detalles del producto
@@ -301,6 +347,8 @@ def get_product(product_id):
         WHERE id = :product_id
         """
         result = db.session.execute(query, {'product_id': str(product_id)}).fetchone()
+
+        token = request.headers.get('Authorization').split(" ")[1] 
 
         if not result:
             return jsonify({"message": "Producto no encontrado"}), 404
@@ -321,10 +369,16 @@ def get_product(product_id):
         event = Event()
         with cache_lock:
             review_events[str(product_id)] = event
+        
+        # Publicar solicitud en Kafka con el token
+        request_data = {
+            'product_id': str(product_id),
+            "token": token  
+        }
 
         # Publicar solicitud de reseñas en Kafka
         try:
-            producer.send('reviews-requests', {'product_id': str(product_id)})
+            producer.send('reviews-requests', request_data)
             producer.flush()
             print(f"Solicitud de reseñas enviada a Kafka para producto {product_id}")
         except Exception as kafka_error:
@@ -355,23 +409,6 @@ def get_product(product_id):
     except Exception as e:
         print(f"Error al obtener detalles del producto: {str(e)}")
         return jsonify({"message": f"Error interno: {str(e)}"}), 500
-
-# 1.3 Crear un nuevo producto (admin)
-@app.route('/api/products', methods=['POST'])
-def create_product():
-    None
-
-
-# 1.4 Actualizar un producto (admin)
-@app.route('/api/products/<int:productId>', methods=['PUT'])
-def update_product(productId):
-    None
-
-
-# 1.5 Eliminar un producto (admin)
-@app.route('/api/products/<int:productId>', methods=['DELETE'])
-def delete_product(productId):
-    None
 
 
 if __name__ == '__main__':

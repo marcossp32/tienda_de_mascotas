@@ -6,3 +6,4 @@ psycopg2-binary==2.9.3
 SQLAlchemy==1.4.46
 flask-cors==3.0.10
 kafka-python==2.0.2
+
