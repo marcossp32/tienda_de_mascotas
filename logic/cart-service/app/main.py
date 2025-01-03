@@ -30,6 +30,43 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
+# Consumidor de Kafka para solicitudes de direcciones
+def consume_cart_items_request():
+    try:
+        consumer = KafkaConsumer(
+            "cart-items-requests",
+            bootstrap_servers=KAFKA_BROKER,
+            value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+            group_id="cart-service",
+            auto_offset_reset="latest",
+        )
+        print("Iniciando consumo del tópico 'cart-items-requests'")
+
+        for message in consumer:
+            data = message.value
+            user_id = data.get("user_id")
+            print(f"Solicitud de dirección recibida para user_id: {user_id}")
+
+            with app.test_request_context(f"/api/cart?user_id={user_id}"):
+                # Llamar directamente al endpoint
+                    response = get_cart()
+                    status_code = response[1]
+
+                    if status_code == 200:
+                        cart_items = response[0].get_json()
+                        # Publicar resultados en Kafka
+                        producer.send("cart-responses", cart_items)
+                        producer.flush()
+                        print(f"Respuesta de dirección publicada en Kafka: {cart_items}")
+                    else:
+                        print(f"Error: {status_code}")
+
+    except Exception as e:
+        print(f"Error al procesar la solicitud de dirección: {e}")
+
+
+# Iniciar consumidor en un hilo separado
+Thread(target=consume_cart_items_request, daemon=True).start()
 
 # 4.1 Obtener carrito actual y publicar en Kafka
 @app.route('/api/cart', methods=['GET'])

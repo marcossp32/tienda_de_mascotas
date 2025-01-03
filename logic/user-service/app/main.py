@@ -10,7 +10,11 @@ import logging
 import os
 from kafka import KafkaProducer, KafkaConsumer
 import threading
+import sys
+import json
 
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 app = Flask(__name__)
 CORS(app)
@@ -193,14 +197,15 @@ def list_addresses():
         if not addresses:
             return jsonify({"message": "No se encontraron direcciones."}), 404
 
+        # Ajustar para acceder con índices
         response = [{
-            "address_id": str(row["id"]),
-            "street": row["street"],
-            "city": row["city"],
-            "state": row["state"],
-            "country": row["country"],
-            "zip_code": row["zip_code"],
-            "is_default": row["is_default"]
+            "address_id": str(row[0]),
+            "street": row[1],
+            "city": row[2],
+            "state": row[3],
+            "country": row[4],
+            "zip_code": row[5],
+            "is_default": row[6]
         } for row in addresses]
 
         return jsonify(response), 200
@@ -210,62 +215,43 @@ def list_addresses():
         return jsonify({"message": f"Error interno: {str(e)}"}), 500
 
 
+
 # Consumidor de Kafka para solicitudes de direcciones
 def consume_address_requests():
-    consumer = KafkaConsumer(
-        "address-requests",
-        bootstrap_servers=KAFKA_BROKER,
-        value_deserializer=lambda x: json.loads(x.decode('utf-8')),
-        group_id="user-service",
-        auto_offset_reset="earliest",
-    )
-    print("Iniciando consumo del tópico 'address-requests'")
+    try:
+        consumer = KafkaConsumer(
+            "address-requests",
+            bootstrap_servers=KAFKA_BROKER,
+            value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+            group_id="user-service",
+            auto_offset_reset="latest",
+        )
+        print("Iniciando consumo del tópico 'address-requests'")
 
-    for message in consumer:
-        data = message.value
-        user_id = data.get("user_id")
-        print(f"Solicitud de dirección recibida para user_id: {user_id}")
+        for message in consumer:
+            data = message.value
+            user_id = data.get("user_id")
+            print(f"Solicitud de dirección recibida para user_id: {user_id}")
 
-        with app.app_context():
-            try:
-                # Consultar la dirección predeterminada del usuario
-                query = """
-                SELECT id, street, city, state, country, zip_code, is_default
-                FROM addresses
-                WHERE user_id = :user_id AND is_default = TRUE
-                """
-                params = {"user_id": user_id}
-                result = db.session.execute(query, params).fetchone()
+            with app.test_request_context(f"/api/users/addresses?user_id={user_id}"):
+                response = list_addresses()
+                status_code = response[1]
 
-                if not result:
-                    response = {"user_id": user_id, "address": None}
+                if status_code == 200:
+                    address = response[0].get_json()
+                    producer.send("address-responses", address)
+                    producer.flush()
+                    print(f"Respuesta de dirección publicada en Kafka: {address}")
                 else:
-                    response = {
-                        "user_id": user_id,
-                        "address": {
-                            "address_id": str(result["id"]),
-                            "street": result["street"],
-                            "city": result["city"],
-                            "state": result["state"],
-                            "country": result["country"],
-                            "zip_code": result["zip_code"],
-                            "is_default": result["is_default"]
-                        }
-                    }
+                    print(f"Error al consultar addresses: {status_code}")
 
-                # Publicar la respuesta en Kafka
-                producer.send("address-responses", response)
-                producer.flush()
-                print(f"Respuesta de dirección publicada en Kafka: {response}")
+    except Exception as e:
+        print(f"Error: {e}")
 
-            except Exception as e:
-                print(f"Error al procesar la solicitud de dirección: {e}")
 
 
 # Iniciar consumidor en un hilo separado
 threading.Thread(target=consume_address_requests, daemon=True).start()
-
-
 
 
 # 3.6 Agregar dirección de envío
@@ -284,4 +270,4 @@ def delete_address(address_id):
     None
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000,debug=True)

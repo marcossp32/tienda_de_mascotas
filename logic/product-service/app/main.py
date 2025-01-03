@@ -132,10 +132,52 @@ def consume_search_requests():
         print(f"Error en el consumidor de Kafka para 'search-requests': {e}")
 
 
+# Consumidor de Kafka para actualizaciones de inventario
+def consume_inventory_updates():
+    consumer = KafkaConsumer(
+        'inventory-updates',
+        bootstrap_servers=KAFKA_BROKER,
+        value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+        group_id=f'product-service-{random.randint(1, 100000)}',
+        auto_offset_reset='latest'
+    )
+    print("Iniciando consumo del tópico 'inventory-updates'")
+
+    for message in consumer:
+        data = message.value
+        product_id = data.get('product_id')
+        quantity_change = data.get('quantity', 0)
+        print(f"Actualización de inventario recibida para producto {product_id}, cambio en cantidad: {quantity_change}")
+
+        with app.app_context():
+            try:
+                query = "SELECT stock FROM products WHERE id = :product_id"
+                result = db.session.execute(query, {'product_id': product_id}).fetchone()
+
+                if result:
+                    current_stock = result['stock']
+                    new_stock = current_stock + quantity_change
+                    if new_stock < 0:
+                        print(f"Error: El inventario no puede ser negativo para producto {product_id}")
+                        continue
+
+                    update_query = "UPDATE products SET stock = :new_stock, updated_at = :updated_at WHERE id = :product_id"
+                    db.session.execute(update_query, {
+                        'new_stock': new_stock,
+                        'updated_at': datetime.utcnow(),
+                        'product_id': product_id
+                    })
+                    db.session.commit()
+                    print(f"Inventario actualizado para producto {product_id}: {new_stock}")
+                else:
+                    print(f"Producto {product_id} no encontrado.")
+            except Exception as e:
+                print(f"Error al actualizar inventario para producto {product_id}: {str(e)}")
+
 # Iniciar consumidores en hilos separados
 threading.Thread(target=consume_search_requests, daemon=True).start()
 threading.Thread(target=consume_availability_requests, daemon=True).start()
-# threading.Thread(target=consume_inventory_updates, daemon=True).start()
+threading.Thread(target=consume_inventory_updates, daemon=True).start()
 
 
 @app.route('/api/products', methods=['GET'])
@@ -330,51 +372,6 @@ def update_product(productId):
 @app.route('/api/products/<int:productId>', methods=['DELETE'])
 def delete_product(productId):
     None
-
-
-
-
-# # Consumidor de Kafka para actualizaciones de inventario
-# def consume_inventory_updates():
-#     consumer = KafkaConsumer(
-#         'inventory-updates',
-#         bootstrap_servers=KAFKA_BROKER,
-#         value_deserializer=lambda x: json.loads(x.decode('utf-8')),
-#         group_id='product-service',
-#         auto_offset_reset='earliest'
-#     )
-#     print("Iniciando consumo del tópico 'inventory-updates'")
-
-#     for message in consumer:
-#         data = message.value
-#         product_id = data.get('product_id')
-#         quantity_change = data.get('quantity', 0)
-#         print(f"Actualización de inventario recibida para producto {product_id}, cambio en cantidad: {quantity_change}")
-
-#         with app.app_context():
-#             try:
-#                 query = "SELECT stock FROM products WHERE id = :product_id"
-#                 result = db.session.execute(query, {'product_id': product_id}).fetchone()
-
-#                 if result:
-#                     current_stock = result['stock']
-#                     new_stock = current_stock + quantity_change
-#                     if new_stock < 0:
-#                         print(f"Error: El inventario no puede ser negativo para producto {product_id}")
-#                         continue
-
-#                     update_query = "UPDATE products SET stock = :new_stock, updated_at = :updated_at WHERE id = :product_id"
-#                     db.session.execute(update_query, {
-#                         'new_stock': new_stock,
-#                         'updated_at': datetime.utcnow(),
-#                         'product_id': product_id
-#                     })
-#                     db.session.commit()
-#                     print(f"Inventario actualizado para producto {product_id}: {new_stock}")
-#                 else:
-#                     print(f"Producto {product_id} no encontrado.")
-#             except Exception as e:
-#                 print(f"Error al actualizar inventario para producto {product_id}: {str(e)}")
 
 
 if __name__ == '__main__':

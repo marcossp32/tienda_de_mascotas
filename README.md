@@ -115,7 +115,11 @@ kubectl exec -it <pod de postgres> -- psql -U postgres -d petstore
 
 ##  Instalación y Configuración de Kong en Kubernetes con Helm
 ```bash
+Para instalar el repo la primera vez
+
 helm repo add kong https://charts.konghq.com && helm repo update
+
+Cada vez que se ha hecho minikube delete y se ha vuelto a empezar
 
 helm install kong kong/kong --set ingressController.installCRDs=false && \
 helm upgrade kong kong/kong --set admin.enabled=true --set admin.http.enabled=true
@@ -180,4 +184,19 @@ curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/
 ```
 
 
-<!-- curl -X GET "http://mini:32542/api/search?q=perro" -H "Content-Type: application/json" -->
+<!-- curl -X GET "http://mini:30142/api/search?q=perro" -H "Content-Type: application/json" -->
+
+<!-- curl -X POST http://mini:30142/api/cart/items \
+-H "Content-Type: application/json" \
+-d '{
+  "product_id": "6a8afe13-aa41-4151-8980-d0d5fa765c75",
+  "quantity": 2,
+  "user_id": "558b573e-26ab-45a7-8555-b248356b0375"
+}' -->
+
+<!-- curl -X POST http://mini:30142/api/orders \
+-H "Content-Type: application/json" \
+-d '{
+  "user_id": "558b573e-26ab-45a7-8555-b248356b0375",
+  "payment_method": "credit_card"
+}' -->

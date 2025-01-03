@@ -1,6 +1,5 @@
 from sqlalchemy.exc import SQLAlchemyError
-from create_tables import db, Product, Category, Review, User,app
-from flask import Flask
+from create_tables import db, Product, Category, Review, User, Address, app
 
 
 def insert_sample_data():
@@ -20,7 +19,7 @@ def insert_sample_data():
         db.session.commit()  # Confirmar transacción para obtener IDs
         print("✅ Categorías creadas.")
 
-        # Crear productosd
+        # Crear productos
         product1 = Product(
             name="Pelota para perros",
             description="Pelota de goma ideal para juegos al aire libre.",
@@ -70,6 +69,29 @@ def insert_sample_data():
         db.session.commit()
         print("✅ Usuarios creados.")
 
+        # Crear direcciones para los usuarios
+        address1 = Address(
+            user_id=user1.id,
+            street="Calle Falsa 123",
+            city="Madrid",
+            state="Madrid",
+            country="España",
+            zip_code="28001",
+            is_default=True,
+        )
+        address2 = Address(
+            user_id=user2.id,
+            street="Avenida Siempreviva 742",
+            city="Barcelona",
+            state="Cataluña",
+            country="España",
+            zip_code="08001",
+            is_default=True,
+        )
+        db.session.add_all([address1, address2])
+        db.session.commit()
+        print("✅ Direcciones creadas.")
+
         # Crear reseñas
         review1 = Review(
             product_id=product1.id,
@@ -94,6 +116,7 @@ def insert_sample_data():
     except SQLAlchemyError as e:
         db.session.rollback()
         print(f"❌ Error al insertar datos: {e}")
+
 
 # Ejecutar la función para insertar datos de ejemplo
 if __name__ == '__main__':

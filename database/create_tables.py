@@ -35,7 +35,7 @@ class Product(db.Model):
 class Category(db.Model):
     __tablename__ = 'categories'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = db.Column(db.String, nullable=False, unique=True)
+    name = db.Column(db.String, nullable=False)
     description = db.Column(db.Text)
     parent_category = db.Column(UUID(as_uuid=True), db.ForeignKey('categories.id'), nullable=True)  # Cambiado a UUID
     image_url = db.Column(db.String)
