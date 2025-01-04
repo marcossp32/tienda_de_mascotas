@@ -4,7 +4,7 @@ from create_tables import db, Product, Category, Review, User, Address, app
 
 def insert_sample_data():
     try:
-        # Crear categorías
+        # Categorías
         category1 = Category(
             name="Juguetes para perros",
             description="Juguetes resistentes y divertidos para perros",
@@ -16,15 +16,15 @@ def insert_sample_data():
             image_url="https://via.placeholder.com/32",
         )
         db.session.add_all([category1, category2])
-        db.session.commit()  # Confirmar transacción para obtener IDs
+        db.session.commit()
         print("✅ Categorías creadas.")
 
-        # Crear productos
+        # Productos
         product1 = Product(
             name="Pelota para perros",
             description="Pelota de goma ideal para juegos al aire libre.",
             price=10.99,
-            category=category1.id,  # Usar ID confirmado
+            category=category1.id,
             animal_type="dog",
             brand="DogFun",
             stock=50,
@@ -37,7 +37,7 @@ def insert_sample_data():
             name="Rascador para gatos",
             description="Rascador con varias plataformas y postes.",
             price=45.99,
-            category=category2.id,  # Usar ID confirmado
+            category=category2.id,
             animal_type="cat",
             brand="CatKing",
             stock=20,
@@ -50,7 +50,7 @@ def insert_sample_data():
         db.session.commit()
         print("✅ Productos creados.")
 
-        # Crear usuarios ficticios para las reseñas
+        # Usuarios ficticios para las reseñas
         user1 = User(
             username="user1",
             email="user1@example.com",
@@ -69,7 +69,7 @@ def insert_sample_data():
         db.session.commit()
         print("✅ Usuarios creados.")
 
-        # Crear direcciones para los usuarios
+        # Direcciones para los usuarios
         address1 = Address(
             user_id=user1.id,
             street="Calle Falsa 123",
@@ -92,7 +92,7 @@ def insert_sample_data():
         db.session.commit()
         print("✅ Direcciones creadas.")
 
-        # Crear reseñas
+        # Reseñas
         review1 = Review(
             product_id=product1.id,
             user_id=user1.id,

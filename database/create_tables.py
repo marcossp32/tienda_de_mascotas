@@ -10,7 +10,7 @@ app = Flask(__name__)
 # Configuración de la base de datos
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:12345@postgres-service.default.svc.cluster.local:5432/petstore")
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # Evita el warning
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # 1. Productos
@@ -20,11 +20,11 @@ class Product(db.Model):
     name = db.Column(db.String, nullable=False)
     description = db.Column(db.Text)
     price = db.Column(db.Float, nullable=False)
-    category = db.Column(UUID(as_uuid=True), db.ForeignKey('categories.id'))  # Cambiado a UUID
+    category = db.Column(UUID(as_uuid=True), db.ForeignKey('categories.id'))
     animal_type = db.Column(db.String)
     brand = db.Column(db.String)
     stock = db.Column(db.Integer, nullable=False)
-    images = db.Column(ARRAY(db.String))  # Para almacenar múltiples URLs
+    images = db.Column(ARRAY(db.String))
     specifications = db.Column(JSON)
     tags = db.Column(ARRAY(db.String))
     average_rating = db.Column(db.Float)
@@ -37,7 +37,7 @@ class Category(db.Model):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = db.Column(db.String, nullable=False)
     description = db.Column(db.Text)
-    parent_category = db.Column(UUID(as_uuid=True), db.ForeignKey('categories.id'), nullable=True)  # Cambiado a UUID
+    parent_category = db.Column(UUID(as_uuid=True), db.ForeignKey('categories.id'), nullable=True)
     image_url = db.Column(db.String)
     active = db.Column(db.Boolean, default=True)
 

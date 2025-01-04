@@ -11,9 +11,9 @@ data:
   PRODUCT_AVAILABILITY_RESPONSES_TOPIC: "product-availability-responses"
   INVENTORY_UPDATES_TOPIC: "inventory-updates"
   ORDERS_TOPIC: "orders"
-  ADDRESS_REQUESTS_TOPIC: "address-requests" # Nuevo
-  ADDRESS_RESPONSES_TOPIC: "address-responses" # Nuevo
-  CART_REQUESTS_TOPIC: "cart-items-requests" # Nuevo
-  CART_RESPONSES_TOPIC: "cart-responses" # Nuevo
+  ADDRESS_REQUESTS_TOPIC: "address-requests" 
+  ADDRESS_RESPONSES_TOPIC: "address-responses"
+  CART_REQUESTS_TOPIC: "cart-items-requests"
+  CART_RESPONSES_TOPIC: "cart-responses"
   PARTITIONS: "2"
   REPLICATION_FACTOR: "1"

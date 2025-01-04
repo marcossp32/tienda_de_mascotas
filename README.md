@@ -66,19 +66,24 @@ kubectl apply -f zookeeper/zookeeper.yml
 
 ## Aplicar Configuraciones en Kubernetes
 
-
 ### Primero se aplican los yml de la base de datos.
 ```bash
 kubectl apply -f database/deployment.yml
 kubectl apply -f database/service.yml
 ```
 
-### Una vez veamos que el pod de postgres esta corriendo
+### Comprobamos que el pod creado esta en estado running
+```bash
+kubectl get pods
+```
+
+### Una vez veamos que el pod de postgres esta corriendo aplicamos los Job para crear las tablas e insertar datos a esas tablas y así poder hacer testeos
 ```bash
 kubectl apply -f database/create-tables-job.yml
 kubectl apply -f database/insert-data.yml
 ```
 
+### Aplicamos todos los demás deployment y services de cada carpeta 
 ```bash
 kubectl apply -f logic/cart-service/kube/
 kubectl apply -f logic/category-service/kube/
@@ -89,74 +94,86 @@ kubectl apply -f logic/search-service/kube/
 kubectl apply -f logic/user-service/kube/
 ```
 
-## Verificar Estado de los Pods y Servicios
+### Verificar Estado de los Pods y Servicios
 ```bash
-kubectl get pods -n default
-kubectl get svc -n default
+kubectl get pods
+kubectl get svc
 ```
 
-## En caso de que el pod de de create tables este en not ready y no se hayan creado las tablas, borrar y volver a comprobar
+### Si se quiere comprobar que las tablas han sido creadas y estan en el servicio de postgres, puedes usar \d para ver las tablas creadas
 ```bash
-kubectl delete pod -l app=postgres
-kubectl delete pod <pod de createtables>
-```
-
-## Si se quiere comprobar que las tablas han sido creadas y estan en el servicio de postgres
-```bash
-kubectl exec -it <pod de postgres> -- bash
-psql -U postgres -d petstore
-
-o
-
 kubectl exec -it <pod de postgres> -- psql -U postgres -d petstore
-
-\dt para ver todas las tablas
 ```
+Si ves que las tablas no han sido creadas es posible que hayas aplicado los job muy pronto por lo que se deberá borrar los jobs y aplicarlos de nuevo, para ello: 
 
-##  Instalación y Configuración de Kong en Kubernetes con Helm
 ```bash
-Para instalar el repo la primera vez
+kubectl delete job create-tables
+kubectl delete job insert-data
+```
+y de nuevo:
 
-helm repo add kong https://charts.konghq.com && helm repo update
-
-Cada vez que se ha hecho minikube delete y se ha vuelto a empezar
-
-helm install kong kong/kong --set ingressController.installCRDs=false && \
-helm upgrade kong kong/kong --set admin.enabled=true --set admin.http.enabled=true
+```bash
+kubectl apply -f database/create-tables-job.yml
+kubectl apply -f database/insert-data.yml
 
 ```
+## Instalación y Configuración de Kong en Kubernetes con Helm
 
-##  Comprobar que todo  esta correcto
+#### Si no tienes helm instalado, se puede instalar ejecutando el archivo get_helm.sh
+```bash
+./get_helm.sh
+```
+#### Para instalar el repo la primera vez, usaremos helm
+
+```bash
+helm repo add kong https://charts.konghq.com && helm repo update
+```
+
+#### Una vez instalado, cada vez que se ha hecho minikube delete y se ha vuelto a empezar, habra que instalar esto:
+
+```bash
+helm install kong kong/kong --set ingressController.installCRDs=false && \ 
+helm upgrade kong kong/kong --set admin.enabled=true --set admin.http.enabled=true
+```
+
+###  Comprobar que todo  esta correcto
 ```bash
  kubectl get pods
  kubectl get svc
 ```
 
-
-##  Aplicar el ingress con las rutas para la API Gateway
+###  Aplicar el ingress con las rutas para la API Gateway
 ```bash
 kubectl apply -f kong/kong-ingress.yml
 ```
 
 ## Aplicar el host indicado
+
+Obtenemos la ip:
 ```bash
 minikube ip
-sudo nano /etc/hosts
 ```
-Dentro se debe meter la ip de minikube con el nombre mini de esta manera
+
+Normalmente la ip de minikube es la misma, lo que se debe hacer ahora es colocar de esta manera [ ip , host que se ha aplicado en el ingress de kong ] en /etc/hosts
 ```bash
 192.168.49.2   mini
 ```
 
-## Para probar el registro
+Para acceder ahi:
+```bash
+sudo nano /etc/hosts
+```
 
-### Comprueba el puerto del kong proxy para realizar  el curl
+## Una vez hecho esto ya se pueden probar las rutas
+#### Comprueba el puerto del kong proxy para realizar el curl
 ```bash
  kubectl get svc
 ```
+#### Para las indicaciones se ha añadido < Y lo que hay que poner >, pero se debe poner sin los <> 
 
+### Registro de un usuario
 ```bash
-curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/register -H "Content-Type: application/json" -d '{
+curl -X POST http://mini:<Puerto del kong proxy que apunta al 80>/api/users/register -H "Content-Type: application/json" -d '{
   "username": "prueba",
   "password": "12345",
   "email": "prueba@gmail.com",
@@ -167,61 +184,198 @@ curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/
 ```
 
 ### Debe devolver un mensaje como 
-```bash
-{"message":"Usuario registrado con \u00e9xito","token":"eyJhbGciOiJqUzI1NnR5cCI6IkpXVCJ9.eyJ1ca12UO98snia82TlkMTk2Y2IthLWExMI5Ndj48ak1hwIjoxNzMxNzU4ODEwfQ.4AzOdX7Q75_yZq9HntelIk2pCw_Ks"}
+```json
+{
+  "message": "Usuario registrado con \u00e9xito", 
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOWE4ZWMwNjktMGQ2My00ODkxLWEwZTMtMDM0ZDk4ODk5NjBkIiwiZXhwIjoxNzM2MDgwNTIyfQ.9sT30Ee348HRMi1J1LAhXtvFJ6haFa2YYxu5ethj_aw"
+}
 ```
 
-## Para probar el inicio de sesión
+### Inicio de sesión
 ```bash
-curl -X POST http://mini:<Puerto del kong Proxy corrspondiente al 80>/api/users/login -H "Content-Type: application/json" -d '{
+curl -X POST http://mini:<Puerto del kong proxy que apunta al 80>/api/users/login -H "Content-Type: application/json" -d '{
   "username": "prueba",
   "password": "12345"
 }'
 ```
 ### Debe devolver un mensaje como 
-```bash
-{"message":"Inicio de sesi\u00f3n exitoso","token":"eyJhbGciOiJqUzI1NnR5cCI6IkpXVCJ9.eyJ1ca12UO98snia82TlkMTk2Y2IthLWExMI5Ndj48ak1hwIjoxNzMxNzU4ODEwfQ.4AzOdX7Q75_yZq9HntelIk2pCw_Ks"}
+```json
+{
+  "message": "Inicio de sesi\u00f3n exitoso", 
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOWE4ZWMwNjktMGQ2My00ODkxLWEwZTMtMDM0ZDk4ODk5NjBkIiwiZXhwIjoxNzM2MDgwNTIyfQ.9sT30Ee348HRMi1J1LAhXtvFJ6haFa2YYxu5ethj_aw"
+}
 ```
 
-
-
-
-<!-- Curl para probar la busqueda -->
-<!-- curl -X GET http://mini:30237/api/search?q=perro \
+### Búsqueda de producto
+```bash
+curl -X GET "http://mini:<Puerto del kong proxy que apunta al 80>/api/search?q=perro" \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" -->
-
-<!-- Curl para detalles del prducto y resumen de reseñas -->
-<!-- curl -X GET http://mini:30237/api/products/a745e2b8-96ef-473d-934d-2e76db91d8d7 \
+-H "Authorization: Bearer <Token Jwt>"
+```
+### Debe devolver un mensaje como 
+```json
+{
+  "categories": [
+    {
+      "data": [
+        {
+          "description": "Juguetes resistentes y divertidos para perros", 
+          "id": "d43649ee-7f28-4eb2-a29c-09f2c5c5e2eb", 
+          "image_url": "https://via.placeholder.com/32", 
+          "name": "Juguetes para perros", 
+          "parent_category": null
+        }
+      ], 
+      "type": "category"
+    }
+  ], 
+  "products": [
+    {
+      "data": [
+        {
+          "animal_type": "dog", 
+          "average_rating": 4.5, 
+          "brand": "DogFun", 
+          "category": "d43649ee-7f28-4eb2-a29c-09f2c5c5e2eb", 
+          "created_at": "2025-01-04T12:27:25.905731", 
+          "description": "Pelota de goma ideal para juegos al aire libre.", 
+          "id": "fbdc1a9f-cdf2-4963-bcbb-afbf2bf21316", 
+          "images": [
+            "https://via.placeholder.com/32", 
+            "https://via.placeholder.com/32"
+          ], 
+          "name": "Pelota para perros", 
+          "price": 10.99, 
+          "specifications": {
+            "material": "goma", 
+            "tama\u00f1o": "mediano"
+          }, 
+          "stock": 50, 
+          "tags": [
+            "juguetes", 
+            "perros"
+          ], 
+          "updated_at": "2025-01-04T12:27:25.905734"
+        }
+      ], 
+      "type": "product"
+    }
+  ]
+}
+```
+### Detalles del Producto
+```bash
+curl -X GET "http://mini:<Puerto del kong proxy que apunta al 80>/api/products/<Id del producto>" \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" -->
-
-<!-- Curl para obtener reseñas completas de un producto -->
-<!-- curl -X GET http://mini:30237/api/products/a745e2b8-96ef-473d-934d-2e76db91d8d7/reviews \
+-H "Authorization: Bearer <Token Jwt>"
+```
+### Debe devolver un mensaje como 
+```json
+{
+  "product": {
+    "category": "d43649ee-7f28-4eb2-a29c-09f2c5c5e2eb", 
+    "created_at": "2025-01-04T12:27:25.905731", 
+    "description": "Pelota de goma ideal para juegos al aire libre.", 
+    "id": "fbdc1a9f-cdf2-4963-bcbb-afbf2bf21316", 
+    "images": [
+      "https://via.placeholder.com/32", 
+      "https://via.placeholder.com/32"
+    ], 
+    "name": "Pelota para perros", 
+    "price": 10.99, 
+    "stock": 50, 
+    "updated_at": "2025-01-04T12:27:25.905734"
+  }, 
+  "reviews_summary": {
+    "average_rating": 5.0, 
+    "helpful_votes": 10, 
+    "total_reviews": 1
+  }
+}
+```
+### Reseñas del Producto
+```bash
+curl -X GET "http://mini:<Puerto del kong proxy que apunta al 80>/api/products/<Id del producto>/reviews" \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" -->
-
-<!-- Curl para añadir items al carrito -->
-<!-- curl -X POST http://mini:30237/api/cart/items \
+-H "Authorization: Bearer <Token Jwt>"
+```
+### Debe devolver un mensaje como 
+```json
+{
+  "reviews": [
+    {
+      "comment": "A mi perro le encant\u00f3, es muy resistente.", 
+      "created_at": "2025-01-04T12:27:25.917525", 
+      "helpful": 10, 
+      "id": "42f9a7a3-ca51-4467-9834-b7b495d46c69", 
+      "product_id": "fbdc1a9f-cdf2-4963-bcbb-afbf2bf21316", 
+      "rating": 5, 
+      "title": "\u00a1Excelente juguete!", 
+      "updated_at": "2025-01-04T12:27:25.917527", 
+      "user_id": "e380679a-b505-4106-baef-d709016e6f28"
+    }
+  ]
+}
+```
+### Añadir al Carrito
+```bash
+curl -X POST "http://mini:<Puerto del kong proxy que apunta al 80>/api/cart/items" \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" \
+-H "Authorization: Bearer <Token Jwt>" \
 -d '{
-  "user_id": "08eb1816-f3df-4661-8ac2-fc4a06067fed",
-  "product_id": "a745e2b8-96ef-473d-934d-2e76db91d8d7",
+  "user_id": "<Id del usuario>",
+  "product_id": "<Id del producto>",
   "quantity": 2
-}' -->
-
-<!-- Curl para ver el carrito -->
-<!-- curl -X GET http://mini:30237/api/cart?user_id=08eb1816-f3df-4661-8ac2-fc4a06067fed \
+}'
+```
+### Debe devolver un mensaje como 
+```json
+{
+  "message": "Producto a\u00f1adido al carrito exitosamente."
+}
+```
+### Ver Carrito
+```bash
+curl -X GET "http://mini:<Puerto del kong proxy que apunta al 80>/api/cart?user_id=<Id del usuario>" \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" -->
-
-<!-- Curl para hacer un pedido -->
-<!-- curl -X POST http://mini:30237/api/orders \
+-H "Authorization: Bearer <Token Jwt>"
+```
+### Debe devolver un mensaje como 
+```json
+{
+  "cart_id": "b74d8548-dd3b-4212-848d-4a9c060bd1ad", 
+  "created_at": "2025-01-04T12:54:04.037480", 
+  "items": [
+    {
+      "cart_item_id": "94f3bae2-9beb-4c72-b7c6-3ea55e9236de", 
+      "price": 10.99, 
+      "product_id": "fbdc1a9f-cdf2-4963-bcbb-afbf2bf21316", 
+      "product_images": [
+        "https://via.placeholder.com/32", 
+        "https://via.placeholder.com/32"
+      ], 
+      "product_name": "Pelota para perros", 
+      "quantity": 2
+    }
+  ], 
+  "total_amount": 21.98, 
+  "updated_at": "2025-01-04T12:54:04.039989"
+}
+```
+### Realizar Pedido
+```bash
+curl -X POST http://mini:<Puerto del kong proxy que apunta al 80>/api/orders \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTI2NTRmYzgtYzE5Mi00ZjIyLThhOGMtZTE4M2MyZDEwOTRmIiwiZXhwIjoxNzM2MDA1ODA0fQ.TtbMiZK2VBxRS0riswMRGhp-QGdktjINBxw3L928kiQ" \
+-H "Authorization: Bearer <Token Jwt>" \
 -d '{
-  "user_id": "08eb1816-f3df-4661-8ac2-fc4a06067fed",
+  "user_id": "<Id del usuario>",
   "payment_method": "credit_card"
-}' -->
-
+}'
+```
+### Debe devolver un mensaje como 
+```json
+{
+  "message": "Pedido creado exitosamente.", 
+  "order_id": "fa625a48-23fe-4e11-a4b2-49571f6c8dee"
+}
+```
