@@ -120,6 +120,9 @@ kubectl apply -f database/insert-data.yml
 ## Instalación y Configuración de Kong en Kubernetes con Helm
 
 #### Si no tienes helm instalado, se puede instalar ejecutando el archivo get_helm.sh
+
+Darle permisos (chmod 700)
+
 ```bash
 ./get_helm.sh
 ```
