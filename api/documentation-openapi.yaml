@@ -1,0 +1,350 @@
+openapi: 3.1.0
+info:
+  title: API de Tienda de Mascotas
+  description: API para gestionar productos, carritos, pedidos, y usuarios en una tienda de mascotas. Incluye integraciones con Kafka y autenticación JWT.
+  version: 1.0.0
+paths:
+  /api/cart/items:
+    post:
+      summary: Añadir un producto al carrito de compras
+      description: |
+        Este endpoint permite a un usuario autenticado añadir un producto al carrito. Publica una solicitud en Kafka para verificar disponibilidad.
+      tags:
+        - Carrito
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_id:
+                  type: string
+                  description: ID del producto a añadir.
+                user_id:
+                  type: string
+                  description: ID del usuario.
+                quantity:
+                  type: integer
+                  description: Cantidad del producto a añadir.
+                  default: 1
+      responses:
+        '200':
+          description: Producto añadido al carrito exitosamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Error de validación.
+        '500':
+          description: Error interno del servidor.
+  /api/cart:
+    get:
+      summary: Obtener carrito del usuario
+      description: |
+        Este endpoint permite obtener los detalles del carrito de un usuario autenticado y publica los detalles en Kafka.
+      tags:
+        - Carrito
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema:
+            type: string
+          description: ID del usuario.
+      responses:
+        '200':
+          description: Detalles del carrito.
+        '404':
+          description: Carrito no encontrado.
+        '500':
+          description: Error interno del servidor.
+  /api/categories:
+    get:
+      summary: Listar categorías
+      description: |
+        Obtiene una lista de categorías con soporte de búsqueda y paginación.
+      tags:
+        - Categorías
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          description: Consulta de búsqueda.
+        - in: query
+          name: parent
+          required: false
+          schema:
+            type: string
+          description: ID de la categoría padre.
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+          description: Página de resultados.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+          description: Límite de resultados por página.
+      responses:
+        '200':
+          description: Lista de categorías.
+        '500':
+          description: Error interno del servidor.
+  /api/products:
+    get:
+      summary: Listar productos
+      description: |
+        Busca y filtra productos según criterios proporcionados.
+      tags:
+        - Productos
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          description: Palabra clave para buscar productos.
+        - in: query
+          name: animal_type
+          required: false
+          schema:
+            type: string
+          description: Tipo de animal relacionado con el producto.
+        - in: query
+          name: tags
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          description: Etiquetas para filtrar los productos.
+      responses:
+        '200':
+          description: Lista de productos.
+        '500':
+          description: Error interno del servidor.
+  /api/products/{product_id}:
+    get:
+      summary: Detalles de un producto
+      description: |
+        Obtiene detalles de un producto específico, incluyendo un resumen de reseñas si está disponible.
+      tags:
+        - Productos
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: product_id
+          required: true
+          schema:
+            type: string
+          description: ID del producto.
+      responses:
+        '200':
+          description: Detalles del producto.
+        '404':
+          description: Producto no encontrado.
+        '500':
+          description: Error interno del servidor.
+  /api/products/{product_id}/reviews:
+    get:
+      summary: Listar reseñas de un producto
+      description: |
+        Obtiene la lista de reseñas asociadas a un producto específico.
+      tags:
+        - Reseñas
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: product_id
+          required: true
+          schema:
+            type: string
+          description: ID del producto.
+      responses:
+        '200':
+          description: Lista de reseñas del producto.
+        '500':
+          description: Error interno del servidor.
+  /api/orders:
+    post:
+      summary: Crear un pedido
+      description: |
+        Permite a un usuario autenticado crear un nuevo pedido.
+      tags:
+        - Pedidos
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: string
+                  description: ID del usuario.
+                payment_method:
+                  type: string
+                  description: Método de pago.
+      responses:
+        '201':
+          description: Pedido creado exitosamente.
+        '400':
+          description: Error de validación.
+        '500':
+          description: Error interno del servidor.
+  /api/search:
+    get:
+      summary: Buscar productos y categorías
+      description: |
+        Permite buscar productos y categorías en el sistema.
+      tags:
+        - Búsqueda
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          description: Palabra clave para buscar.
+      responses:
+        '200':
+          description: Resultados de búsqueda.
+        '500':
+          description: Error interno del servidor.
+  /api/users/register:
+    post:
+      summary: Registrar un usuario
+      description: |
+        Registra un nuevo usuario y devuelve un token JWT.
+      tags:
+        - Usuarios
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '201':
+          description: Usuario registrado con éxito.
+        '400':
+          description: Error de validación o usuario ya existente.
+  /api/users/login:
+    post:
+      summary: Iniciar sesión
+      description: |
+        Autentica a un usuario y devuelve un token JWT.
+      tags:
+        - Usuarios
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Inicio de sesión exitoso.
+        '401':
+          description: Credenciales inválidas.
+        '500':
+          description: Error interno del servidor.
+  /api/users/addresses:
+    get:
+      summary: Listar direcciones de un usuario
+      description: |
+        Obtiene una lista de direcciones asociadas a un usuario autenticado.
+      tags:
+        - Usuarios
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema:
+            type: string
+          description: ID del usuario.
+      responses:
+        '200':
+          description: Lista de direcciones del usuario.
+        '400':
+          description: Falta el parámetro user_id.
+        '404':
+          description: No se encontraron direcciones.
+        '500':
+          description: Error interno del servidor.
+    post:
+      summary: Crear una dirección
+      description: |
+        Permite a un usuario autenticado agregar una nueva dirección a su perfil.
+      tags:
+        - Usuarios
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: string
+                street:
+                  type: string
+                city:
+                  type: string
+                state:
+                  type: string
+                country:
+                  type: string
+                zip_code:
+                  type: string
+                is_default:
+                  type: boolean
+      responses:
+        '201':
+          description: Dirección creada exitosamente.
+        '400':
+          description: Datos inválidos o incompletos.
+        '500':
+          description: Error interno del servidor.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
