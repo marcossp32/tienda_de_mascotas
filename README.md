@@ -365,6 +365,28 @@ curl -X GET "http://mini:<Puerto del kong proxy que apunta al 80>/api/cart?user_
   "updated_at": "2025-01-04T12:54:04.039989"
 }
 ```
+### Crear dirección de envio
+```bash
+curl -X POST http://mini:<Puerto del kong proxy que apunta al 80>/api/users/addresses \
+-H "Authorization: Bearer <Token Jwt>" \
+-H "Content-Type: application/json" \
+-d '{
+    "user_id": "<Id del usuario>",
+    "street": "Main St",
+    "city": "Springfield",
+    "state": "IL",
+    "country": "USA",
+    "zip_code": "62701",
+    "is_default": true
+}'
+```
+### Debe devolver un mensaje como 
+```json
+{
+  "address_id": "27e3d2e2-21a5-438f-b02c-3ec75d91ce4e", 
+  "message": "Direcci\u00f3n creada con \u00e9xito"
+}
+```
 ### Realizar Pedido
 ```bash
 curl -X POST http://mini:<Puerto del kong proxy que apunta al 80>/api/orders \

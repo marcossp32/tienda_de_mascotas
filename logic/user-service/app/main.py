@@ -42,6 +42,7 @@ def create_jwt_token(user_id):
 
     Este token incluye:
     - `user_id`: Identificador único del usuario.
+    - `role`: Rol del usuario.
     - `exp`: Tiempo de expiración del token, que en este caso es 24 horas desde el momento de su creación.
 
     El token se firma con una clave secreta definida en la configuración de la aplicación (`app.config['SECRET_KEY']`)
@@ -51,11 +52,25 @@ def create_jwt_token(user_id):
         user_id (str): El identificador único del usuario para incluir en el token.
 
     Returns:
-        str: Un token JWT codificado que contiene el `user_id` y la fecha de expiración.
+        str: Un token JWT codificado que contiene el `user_id`, el `role` y la fecha de expiración.
     """
+    try:
+        existing_user_role = db.session.execute(
+            "SELECT role FROM users WHERE id = :user_id",
+            {'user_id': user_id}
+        ).fetchone()
+        if existing_user_role:
+                existing_user_role = existing_user_role[0] 
+        else:
+            existing_user_role = 'user'
+    except Exception as e:
+        print(f"Error haciendo la consulta para obtener el rol de usuario: {e}")
+        existing_user_role = 'user'
+
     token = jwt.encode(
         {
             'user_id': user_id,
+            'role':existing_user_role,
             'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)  # Expira en 24 horas
         },
         app.config['SECRET_KEY'],  # Clave secreta para firmar el token
@@ -234,7 +249,7 @@ def login_user():
 
 
 # Listar direcciones de envío con filtro de user_id
-@app.route('/api/users/addresses', methods=['GET'])
+@app.route('/api/users/addresses', methods=['GET','POST'])
 @token_required
 def list_addresses():
     """
@@ -247,44 +262,95 @@ def list_addresses():
     Returns:
         Response: Respuesta JSON con las direcciones encontradas o un mensaje de error.
     """
-    try:
-        # Obtener el parámetro user_id de los argumentos de la solicitud
-        user_id = request.args.get('user_id')
-        if not user_id:
-            # Si el user_id no está presente, devolver un mensaje de error
-            return jsonify({"message": "El campo 'user_id' es obligatorio."}), 400
+    if request.method == 'GET':
+        try:
+            # Obtener el parámetro user_id de los argumentos de la solicitud
+            user_id = request.args.get('user_id')
+            if not user_id:
+                # Si el user_id no está presente, devolver un mensaje de error
+                return jsonify({"message": "El campo 'user_id' es obligatorio."}), 400
 
-        # Consulta para obtener las direcciones asociadas al user_id
-        query = """
-        SELECT id, street, city, state, country, zip_code, is_default
-        FROM addresses
-        WHERE user_id = :user_id
-        """
-        params = {"user_id": user_id}
-        addresses = db.session.execute(query, params).fetchall()
+            # Consulta para obtener las direcciones asociadas al user_id
+            query = """
+            SELECT id, street, city, state, country, zip_code, is_default
+            FROM addresses
+            WHERE user_id = :user_id
+            """
+            params = {"user_id": user_id}
+            addresses = db.session.execute(query, params).fetchall()
 
-        # Verificar si se encontraron direcciones
-        if not addresses:
-            return jsonify({"message": "No se encontraron direcciones."}), 404
+            # Verificar si se encontraron direcciones
+            if not addresses:
+                return jsonify({"message": "No se encontraron direcciones."}), 404
 
-        # Construir la respuesta en formato JSON
-        response = [{
-            "address_id": str(row[0]),  # ID de la dirección
-            "street": row[1],          # Calle
-            "city": row[2],            # Ciudad
-            "state": row[3],           # Estado
-            "country": row[4],         # País
-            "zip_code": row[5],        # Código postal
-            "is_default": row[6]       # Indicador de dirección predeterminada
-        } for row in addresses]
+            # Construir la respuesta en formato JSON
+            response = [{
+                "address_id": str(row[0]),  # ID de la dirección
+                "street": row[1],          # Calle
+                "city": row[2],            # Ciudad
+                "state": row[3],           # Estado
+                "country": row[4],         # País
+                "zip_code": row[5],        # Código postal
+                "is_default": row[6]       # Indicador de dirección predeterminada
+            } for row in addresses]
 
-        # Devolver la lista de direcciones con un código de estado HTTP 200
-        return jsonify(response), 200
+            # Devolver la lista de direcciones con un código de estado HTTP 200
+            return jsonify(response), 200
 
-    except Exception as e:
-        # Manejar errores internos y devolver un mensaje genérico de error
-        print(f"Error al listar direcciones: {e}")
-        return jsonify({"message": f"Error interno: {str(e)}"}), 500
+        except Exception as e:
+            # Manejar errores internos y devolver un mensaje genérico de error
+            print(f"Error al listar direcciones: {e}")
+            return jsonify({"message": f"Error interno: {str(e)}"}), 500
+    
+    if request.method == 'POST':
+
+        try:
+
+            # Obtener los datos enviados en la solicitud
+            data = request.get_json()
+
+            # Validar que los datos están presentes
+            required_fields = ['user_id', 'street', 'city', 'state', 'country', 'zip_code', 'is_default']
+            missing_fields = [field for field in required_fields if field not in data]
+
+            if not data or missing_fields:
+                return jsonify({'message': f'Faltan datos: {", ".join(missing_fields)}'}), 400
+
+            # Obtener y validar los valores
+            address_id = str(uuid.uuid4())  # Generar un UUID único para la dirección
+            user_id = data['user_id']
+            street = data['street']
+            city = data['city']
+            state = data['state']
+            country = data['country']
+            zip_code = data['zip_code']
+            is_default = data['is_default']
+
+            # Insertar en la base de datos
+            db.session.execute(
+                """
+                INSERT INTO addresses (id, user_id, street, city, state, country, zip_code, is_default)
+                VALUES (:id, :user_id, :street, :city, :state, :country, :zip_code, :is_default)
+                """,
+                {
+                    'id': address_id,
+                    'user_id': user_id,
+                    'street': street,
+                    'city': city,
+                    'state': state,
+                    'country': country,
+                    'zip_code': zip_code,
+                    'is_default': is_default,
+                }
+            )
+            db.session.commit()
+
+            # Respuesta de éxito
+            return jsonify({'message': 'Dirección creada con éxito', 'address_id': address_id}), 201
+        except Exception as e:
+            # Manejo de errores internos
+            print(f"Error al crear dirección: {e}")
+            return jsonify({'message': 'Error interno en el servidor'}), 500
 
 
 
